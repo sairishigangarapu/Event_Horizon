@@ -1,27 +1,27 @@
 {
   "estimated_density": {
-    "mae": 0.0307,
-    "rmse": 0.0355,
+    "mae": 0.0196,
+    "rmse": 0.0271,
     "count": 32
   },
   "estimated_speed": {
-    "mae": 0.4455,
-    "rmse": 0.472,
+    "mae": 0.318,
+    "rmse": 0.375,
     "count": 32
   },
   "estimated_inflow": {
-    "mae": 0.363,
-    "rmse": 0.4498,
+    "mae": 0.3018,
+    "rmse": 0.3871,
     "count": 32
   },
   "estimated_outflow": {
-    "mae": 0.3834,
-    "rmse": 0.5038,
+    "mae": 0.3784,
+    "rmse": 0.4554,
     "count": 32
   },
   "estimated_queue_length": {
-    "mae": 0.2183,
-    "rmse": 0.3296,
+    "mae": 0.2431,
+    "rmse": 0.3543,
     "count": 32
   },
   "probability_exit_open": {

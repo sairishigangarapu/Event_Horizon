@@ -4,13 +4,12 @@ from crowd_reliability.models.schema import ForecastRecord, ObservationRecord, A
 from crowd_reliability.reliability.conflicts import deduplicate_reports, detect_conflicts
 from crowd_reliability.reliability.freshness import (
     INSUFFICIENT_EVIDENCE_WINDOW_S,
-    POTENTIALLY_OUTDATED_AGE_S,
     RAPID_CHANGE_MIN_REPORTS,
     RAPID_CHANGE_REL_STD,
     RAPID_CHANGE_WINDOW_S,
-    RECENT_VERIFIED_MAX_AGE_S,
     observation_age_seconds,
 )
+from crowd_reliability.reliability.thresholds import DEFAULT_FRESHNESS_THRESHOLDS
 
 class ComparisonResult:
     def __init__(
@@ -156,8 +155,12 @@ class ForecastComparator:
                 rel_std = (sum((v - mean_val) ** 2 for v in values) / len(values)) ** 0.5 / abs(mean_val)
                 is_rapid = rel_std > RAPID_CHANGE_REL_STD
 
-        is_stale = (age_sec > POTENTIALLY_OUTDATED_AGE_S)
-        coverage = 1.0 if not is_stale else max(0.1, 1.0 - (age_sec - 45.0) / 100.0)
+        # Variable/scenario-aware freshness thresholds (P2): event-driven states go
+        # stale faster than bulk density. Density keeps its 45s boundary.
+        thresholds_obj = DEFAULT_FRESHNESS_THRESHOLDS
+        recent_th, outdated_th = thresholds_obj.for_variable(variable)
+        is_stale = age_sec > outdated_th
+        coverage = 1.0 if not is_stale else max(0.1, 1.0 - (age_sec - outdated_th) / 100.0)
 
         return AssessmentRecord(
             target_ref_id=target_ref_id,
@@ -168,12 +171,12 @@ class ForecastComparator:
             coverage=round(coverage, 3),
             per_variable_flags={
                 # Legacy flags (kept for API/dashboard compatibility)
-                "stale": is_stale,
+                "stale": age_sec > outdated_th,
                 "conflict": is_conflict,
                 "missing": False,
                 # Five independent freshness labels
-                "recently_verified": age_sec <= RECENT_VERIFIED_MAX_AGE_S,
-                "potentially_outdated": is_stale,
+                "recently_verified": age_sec <= recent_th,
+                "potentially_outdated": age_sec > outdated_th,
                 "conflicting_evidence": is_conflict,
                 "rapidly_changing": is_rapid,
                 "insufficient_current_evidence": age_sec > INSUFFICIENT_EVIDENCE_WINDOW_S,

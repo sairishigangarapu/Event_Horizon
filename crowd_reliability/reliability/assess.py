@@ -10,6 +10,8 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
 from crowd_reliability.reliability.conflicts import (
+    ConflictGraph,
+    build_conflict_graph,
     deduplicate_reports,
     detect_conflicts,
     group_comparable,
@@ -17,14 +19,16 @@ from crowd_reliability.reliability.conflicts import (
 from crowd_reliability.reliability.coverage import compute_coverage
 from crowd_reliability.reliability.freshness import (
     INSUFFICIENT_EVIDENCE_WINDOW_S,
-    POTENTIALLY_OUTDATED_AGE_S,
     RAPID_CHANGE_MIN_REPORTS,
     RAPID_CHANGE_REL_STD,
     RAPID_CHANGE_WINDOW_S,
-    RECENT_VERIFIED_MAX_AGE_S,
     _as_naive_utc,
     _field,
     observation_age_seconds,
+)
+from crowd_reliability.reliability.thresholds import (
+    DEFAULT_FRESHNESS_THRESHOLDS,
+    FreshnessThresholds,
 )
 
 FRESHNESS_LABELS = [
@@ -54,22 +58,33 @@ def assess_information(
     reports: List[Any],
     as_of: datetime,
     expected_coverage: Optional[Dict[Tuple[str, str], List[str]]] = None,
+    thresholds: Optional[FreshnessThresholds] = None,
+    scenario_type: Optional[str] = None,
+    zone_type_lookup: Optional[Dict[str, str]] = None,
 ) -> Dict[str, Any]:
     """
     Assesses evidence freshness/conflict/coverage over a set of reports.
+
+    Uses scenario/zone-dependent explainable freshness thresholds (P2).
 
     Returns:
         {
           "as_of": iso str,
           "dedup_mode": "source_id" | "content_hash_only" | "empty",
+          "thresholds": {variable: [recent_sec, outdated_sec]},
           "per_report": [{report_id, zone_id, variable, age_seconds,
                           is_duplicate_of, labels}],
           "per_zone":   [{zone_id, variable, age_seconds, independent_report_count,
-                          conflict_ids, coverage_ratio, labels}],
+                          conflict_ids, conflict_provenance, threshold_used,
+                          coverage_ratio, labels}],
+          "conflict_graph": {num_nodes, num_conflict_edges, num_duplicate_edges, ...},
         }
     Labels are independent booleans; age_seconds / conflict_ids / coverage_ratio
-    are separate fields, not a fused score.
+    are separate fields, not a fused score. A stale report is flagged
+    potentially_outdated (needs verification) — never as false.
     """
+    thresholds_obj = thresholds or DEFAULT_FRESHNESS_THRESHOLDS
+    zone_type_lookup = zone_type_lookup or {}
     as_of_naive = _as_naive_utc(as_of)
     as_of_reports = [
         r for r in reports
@@ -90,6 +105,19 @@ def assess_information(
         if is_conflict:
             conflict_ids_by_key[key] = ids
     conflicting_report_ids = {rid for ids in conflict_ids_by_key.values() for rid in ids}
+
+    # Richer conflict provenance graph (P2): conflict + duplicate edges with
+    # source provenance. Built once; per-zone views are derived below.
+    graph = build_conflict_graph(as_of_reports, as_of)
+    provenance_by_zone: Dict[str, List[Any]] = {}
+    for edg in graph.conflict_edges:
+        provenance_by_zone.setdefault(edg.zone_id, []).append({
+            "reports": edg.reports,
+            "variable": edg.variable,
+            "mean": round(edg.mean, 6),
+            "relative_deviation": round(edg.relative_deviation, 6),
+            "observed_at": edg.observed_at,
+        })
 
     # Rapid-change detection per (zone, variable) over the rapid window.
     rapid_keys = set()
@@ -113,10 +141,13 @@ def assess_information(
         group = by_key_all[key]
         ages = [observation_age_seconds(r, as_of) for r in group]
         latest_age = min(ages)
+        zone_type = zone_type_lookup.get(zone_id)
+        recent_s, outdated_s = thresholds_obj.for_variable(
+            variable, zone_type, scenario_type)
 
         labels = _empty_labels()
-        labels["recently_verified"] = latest_age <= RECENT_VERIFIED_MAX_AGE_S
-        labels["potentially_outdated"] = latest_age > POTENTIALLY_OUTDATED_AGE_S
+        labels["recently_verified"] = latest_age <= recent_s
+        labels["potentially_outdated"] = latest_age > outdated_s
         labels["conflicting_evidence"] = key in conflict_ids_by_key
         labels["rapidly_changing"] = key in rapid_keys
         labels["insufficient_current_evidence"] = latest_age > INSUFFICIENT_EVIDENCE_WINDOW_S
@@ -133,6 +164,9 @@ def assess_information(
             "age_seconds": round(latest_age, 2),
             "independent_report_count": len(group),
             "conflict_ids": conflict_ids_by_key.get(key, []),
+            "conflict_provenance": provenance_by_zone.get(zone_id, []),
+            "threshold_used": {"recent_sec": round(recent_s, 3),
+                               "outdated_sec": round(outdated_s, 3)},
             "coverage_ratio": cov_ratio,
             "labels": labels,
         })
@@ -142,6 +176,9 @@ def assess_information(
     if expected_coverage:
         for key in sorted(set(expected_coverage.keys()) - set(by_key_all.keys())):
             zone_id, variable = key
+            zone_type = zone_type_lookup.get(zone_id)
+            recent_s, outdated_s = thresholds_obj.for_variable(
+                variable, zone_type, scenario_type)
             labels = _empty_labels()
             labels["insufficient_current_evidence"] = True
             zone_labels[key] = labels
@@ -151,6 +188,9 @@ def assess_information(
                 "age_seconds": None,
                 "independent_report_count": 0,
                 "conflict_ids": [],
+                "conflict_provenance": provenance_by_zone.get(zone_id, []),
+                "threshold_used": {"recent_sec": round(recent_s, 3),
+                                   "outdated_sec": round(outdated_s, 3)},
                 "coverage_ratio": 0.0,
                 "labels": labels,
             })
@@ -160,11 +200,14 @@ def assess_information(
         report_id = str(_field(r, "report_id"))
         key = (_field(r, "zone_id"), _field(r, "variable"))
         age = observation_age_seconds(r, as_of)
+        zone_type = zone_type_lookup.get(key[0])
+        recent_s, outdated_s = thresholds_obj.for_variable(
+            _field(r, "variable"), zone_type, scenario_type)
         z_labels = zone_labels.get(key, _empty_labels())
         labels = {
-            "recently_verified": age <= RECENT_VERIFIED_MAX_AGE_S,
+            "recently_verified": age <= recent_s,
             # Age alone => needs verification, never 'false'.
-            "potentially_outdated": age > POTENTIALLY_OUTDATED_AGE_S,
+            "potentially_outdated": age > outdated_s,
             "conflicting_evidence": report_id in conflicting_report_ids,
             "rapidly_changing": key in rapid_keys,
             "insufficient_current_evidence": z_labels["insufficient_current_evidence"],
@@ -182,8 +225,12 @@ def assess_information(
     return {
         "as_of": as_of.isoformat(),
         "dedup_mode": dedup_mode,
+        "scenario_type": scenario_type,
+        "thresholds": {var: [recent, outdated] for var, (recent, outdated)
+                       in thresholds_obj.defaults().items()},
         "label_names": list(FRESHNESS_LABELS),
         "per_report": per_report,
         "per_zone": per_zone,
         "coverage_overall": coverage["overall"],
+        "conflict_graph": graph.to_dict(),
     }

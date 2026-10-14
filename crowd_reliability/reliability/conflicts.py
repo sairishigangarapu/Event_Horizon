@@ -8,6 +8,7 @@ same claim regardless of how many channels forwarded it. When source metadata
 is present it is recorded per group; when absent, dedup is flagged as
 'content_hash_only'.
 """
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -104,3 +105,141 @@ def detect_conflicts(group: List[Any]) -> Tuple[bool, List[str]]:
             if abs(v - mean_val) / (mean_val + 1e-4) > CONFLICT_REL_DEVIATION:
                 conflict_ids.append(str(_field(r, "report_id")))
     return (len(conflict_ids) > 0), sorted(conflict_ids)
+
+
+@dataclass
+class ConflictEdge:
+    """An edge in the conflict provenance graph: two reports disagree."""
+
+    reports: List[str]
+    zone_id: str
+    variable: str
+    mean: float
+    deviation: float
+    relative_deviation: float
+    observed_at: Optional[str] = None
+
+
+@dataclass
+class DuplicateEdge:
+    """A dedup edge: one report is a forwarded copy of another."""
+
+    kept: str
+    duplicate: str
+    zone_id: str
+    variable: str
+    source_id: Optional[str] = None
+    dedup_method: str = "content_hash"
+
+
+@dataclass
+class ConflictGraph:
+    """Richer provenance for disagreement and duplication.
+
+    Nodes are reports; edges are conflicts (disagreement) or duplicates
+    (forwarded copies of the same claim). Source provenance is attached to
+    every edge so downstream consumers can ask *which sources* disagree.
+    """
+
+    nodes: List[str] = field(default_factory=list)
+    conflict_edges: List[ConflictEdge] = field(default_factory=list)
+    duplicate_edges: List[DuplicateEdge] = field(default_factory=list)
+    source_provenance: Dict[str, List[str]] = field(default_factory=dict)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "num_nodes": len(self.nodes),
+            "num_conflict_edges": len(self.conflict_edges),
+            "num_duplicate_edges": len(self.duplicate_edges),
+            "conflict_edges": [
+                {
+                    "reports": e.reports,
+                    "zone_id": e.zone_id,
+                    "variable": e.variable,
+                    "mean": e.mean,
+                    "deviation": e.deviation,
+                    "relative_deviation": e.relative_deviation,
+                    "observed_at": e.observed_at,
+                    "sources": self.source_provenance.get(e.reports[0], []),
+                }
+                for e in self.conflict_edges
+            ],
+            "duplicate_edges": [
+                {
+                    "kept": e.kept,
+                    "duplicate": e.duplicate,
+                    "zone_id": e.zone_id,
+                    "variable": e.variable,
+                    "source_id": e.source_id,
+                    "method": e.dedup_method,
+                }
+                for e in self.duplicate_edges
+            ],
+        }
+
+
+def build_conflict_graph(
+    reports: List[Any],
+    as_of: Optional[datetime] = None,
+    window_s: float = CONFLICT_WINDOW_S,
+    rel_deviation: float = CONFLICT_REL_DEVIATION,
+) -> ConflictGraph:
+    """Assemble the conflict + duplication provenance graph for a report set.
+
+    Conflict edges are computed over the comparable (same zone/variable/time)
+    groups; duplicate edges come from :func:`deduplicate_reports`. No edge is
+    created between two forwarded copies of the same claim (they are collapsed
+    first), so copies never count as independent confirmations.
+    """
+    graph = ConflictGraph(nodes=[str(_field(r, "report_id")) for r in reports])
+
+    # Duplicate / forwarded-copy edges (collapsed first so copies don't
+    # participate in conflict comparisons).
+    independent, duplicates, _ = deduplicate_reports(reports)
+    seen: Dict[str, str] = {}  # report_id -> kept id
+    for kept, dups in duplicates.items():
+        seen[kept] = kept
+        for d in dups:
+            seen[d] = kept
+    for kept, dups in duplicates.items():
+        for d in dups:
+            rep_k = next((r for r in reports if str(_field(r, "report_id")) == kept), None)
+            rep_d = next((r for r in reports if str(_field(r, "report_id")) == d), None)
+            graph.duplicate_edges.append(DuplicateEdge(
+                kept=kept,
+                duplicate=d,
+                zone_id=str(_field(rep_k, "zone_id")) if rep_k else "",
+                variable=str(_field(rep_k, "variable")) if rep_k else "",
+                source_id=str(_field(rep_k, "source_id")) if rep_k else None,
+                dedup_method="content_hash" if rep_k else "content_hash",
+            ))
+            graph.source_provenance.setdefault(kept, [])
+            if rep_k:
+                graph.source_provenance[kept].append(str(_field(rep_k, "source_id")))
+
+    # Conflict edges over independent (de-duplicated) comparable groups.
+    groups = group_comparable(independent, as_of, window_s=window_s)
+    for key, group in groups.items():
+        if len(group) < 2:
+            continue
+        is_conflict, conflict_ids = detect_conflicts(group)
+        if not is_conflict:
+            continue
+        values = [float(_field(r, "value")) for r in group]
+        mean_val = sum(values) / len(values)
+        worst = max(group, key=lambda r: abs(float(_field(r, "value")) - mean_val))
+        rel = abs(float(_field(worst, "value")) - mean_val) / (mean_val + 1e-4)
+        sources = [str(_field(r, "source_id")) for r in group]
+        for r in conflict_ids:
+            graph.source_provenance.setdefault(r, sources)
+        oat = _field(worst, "observed_at")
+        graph.conflict_edges.append(ConflictEdge(
+            reports=sorted(conflict_ids),
+            zone_id=str(_field(worst, "zone_id")),
+            variable=str(_field(worst, "variable")),
+            mean=mean_val,
+            deviation=abs(float(_field(worst, "value")) - mean_val),
+            relative_deviation=rel,
+            observed_at=_as_naive_utc(oat).isoformat() if oat is not None else None,
+        ))
+    return graph
