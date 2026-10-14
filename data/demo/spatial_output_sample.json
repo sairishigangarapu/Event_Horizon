@@ -1,0 +1,699 @@
+{
+  "description": "Spatial inference sample from the active production hypernetwork+GNN pair",
+  "scenario": {
+    "scenario_id": "bottleneck_exit_closure",
+    "seed": 42,
+    "simulator": "crowd_reliability.simulation.CrowdSimulator",
+    "as_of": "2026-10-14T12:02:30+00:00",
+    "as_of_second": 150
+  },
+  "inputs": {
+    "observations_received_by_as_of": 1714,
+    "observations_total_generated": 3377,
+    "latest_received_at_used": "2026-10-14T12:02:29.147102+00:00"
+  },
+  "tree_vector": {
+    "channel_names": [
+      "estimated_density",
+      "estimated_speed",
+      "estimated_inflow",
+      "estimated_outflow",
+      "estimated_queue_length",
+      "probability_exit_open"
+    ],
+    "values": {
+      "ent_a": [
+        0.3046,
+        1.2615,
+        1.1532,
+        1.1956,
+        0.0,
+        0.0
+      ],
+      "ent_b": [
+        0.244,
+        1.2771,
+        0.9753,
+        0.9315,
+        0.0,
+        0.0
+      ],
+      "corridor_1": [
+        0.3731,
+        1.2439,
+        1.1532,
+        1.2794,
+        0.0,
+        0.0
+      ],
+      "corridor_2": [
+        0.244,
+        1.2771,
+        1.1532,
+        1.1956,
+        0.0,
+        0.0
+      ],
+      "concourse": [
+        0.5621,
+        1.1951,
+        1.9885,
+        1.7532,
+        0.0,
+        0.0
+      ],
+      "stair_1": [
+        0.3731,
+        1.2439,
+        1.641,
+        1.5554,
+        0.0,
+        0.0
+      ],
+      "exit_1": [
+        0.8259,
+        1.1272,
+        1.8951,
+        1.1956,
+        30.5633,
+        1.0
+      ],
+      "exit_2": [
+        0.122,
+        1.3086,
+        1.5524,
+        1.5554,
+        0.3535,
+        0.9946
+      ]
+    },
+    "masks": {
+      "ent_a": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        0
+      ],
+      "ent_b": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        0
+      ],
+      "corridor_1": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        0
+      ],
+      "corridor_2": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        0
+      ],
+      "concourse": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        0
+      ],
+      "stair_1": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        0
+      ],
+      "exit_1": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "exit_2": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "tree_version": "dt_bank_v1"
+  },
+  "spatial_output": {
+    "H": {
+      "ent_a": [
+        0.0,
+        1.417566,
+        0.0,
+        0.330082,
+        1.012356,
+        0.0,
+        0.0,
+        0.0,
+        0.044002,
+        1.419991,
+        0.0,
+        0.342137,
+        0.0,
+        0.0,
+        1.408126,
+        0.776857
+      ],
+      "ent_b": [
+        0.0,
+        1.433245,
+        0.0,
+        0.447886,
+        0.804136,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.527804,
+        0.0,
+        0.17834,
+        0.0,
+        0.0,
+        1.480255,
+        0.843667
+      ],
+      "corridor_1": [
+        0.0,
+        1.514871,
+        0.0,
+        0.43789,
+        0.605813,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.485786,
+        0.0,
+        0.0,
+        0.0,
+        0.312819,
+        1.632584,
+        1.02669
+      ],
+      "corridor_2": [
+        0.0,
+        1.532024,
+        0.0,
+        0.400052,
+        0.721182,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.432031,
+        0.0,
+        0.0,
+        0.0,
+        0.254344,
+        1.640585,
+        1.002775
+      ],
+      "concourse": [
+        0.0,
+        1.366966,
+        0.0,
+        0.282942,
+        0.65126,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.346465,
+        0.0,
+        0.0,
+        0.0,
+        0.969537,
+        1.575244,
+        1.090682
+      ],
+      "stair_1": [
+        0.0,
+        1.507716,
+        0.0,
+        0.383872,
+        0.618496,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.516526,
+        0.0,
+        0.0,
+        0.0,
+        0.222693,
+        1.627836,
+        1.046111
+      ],
+      "exit_1": [
+        0.0,
+        1.270009,
+        0.0,
+        0.456483,
+        0.660336,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.683142,
+        0.0,
+        0.115205,
+        0.0,
+        0.0,
+        1.549463,
+        0.966987
+      ],
+      "exit_2": [
+        0.0,
+        1.396004,
+        0.0,
+        0.311323,
+        0.929871,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.485513,
+        0.0,
+        0.24874,
+        0.0,
+        0.0,
+        1.409568,
+        0.938371
+      ]
+    },
+    "Vn": {
+      "ent_a": [
+        0.166004,
+        -0.125943,
+        0.112752,
+        -0.275875,
+        -0.116266,
+        0.193509,
+        -0.096402,
+        0.022873,
+        0.173601,
+        -0.195223,
+        -0.026919,
+        0.117782,
+        -0.112972,
+        0.128929,
+        0.020187,
+        -0.064164
+      ],
+      "ent_b": [
+        0.174783,
+        -0.09903,
+        0.125794,
+        -0.181272,
+        -0.095249,
+        0.125125,
+        -0.112967,
+        0.097884,
+        0.195759,
+        -0.144821,
+        0.014357,
+        0.13457,
+        -0.009002,
+        0.118566,
+        0.0742,
+        -0.089946
+      ],
+      "corridor_1": [
+        0.207946,
+        -0.081905,
+        0.085615,
+        -0.199203,
+        -0.104648,
+        0.102116,
+        -0.164929,
+        0.146815,
+        0.183542,
+        -0.132665,
+        -0.025733,
+        0.094846,
+        0.011236,
+        0.084783,
+        0.055642,
+        -0.093253
+      ],
+      "corridor_2": [
+        0.195858,
+        -0.117752,
+        0.080801,
+        -0.288008,
+        -0.108077,
+        0.204313,
+        -0.127403,
+        0.019134,
+        0.144901,
+        -0.173504,
+        -0.036807,
+        0.120361,
+        -0.089815,
+        0.098267,
+        0.014101,
+        -0.074482
+      ],
+      "concourse": [
+        0.229426,
+        -0.108135,
+        0.138907,
+        -0.22268,
+        -0.133658,
+        0.090148,
+        -0.150541,
+        0.119541,
+        0.236896,
+        -0.153921,
+        -0.023969,
+        0.094439,
+        0.005262,
+        0.110534,
+        0.024886,
+        -0.11213
+      ],
+      "stair_1": [
+        0.202933,
+        -0.097964,
+        0.10193,
+        -0.207132,
+        -0.098472,
+        0.085945,
+        -0.152714,
+        0.143897,
+        0.198034,
+        -0.14118,
+        -0.007145,
+        0.102341,
+        0.021814,
+        0.108091,
+        0.079401,
+        -0.089501
+      ],
+      "exit_1": [
+        0.275202,
+        -0.120494,
+        0.095184,
+        -0.122933,
+        -0.033044,
+        0.058349,
+        -0.250566,
+        0.143949,
+        0.256881,
+        -0.061034,
+        0.050968,
+        0.065085,
+        0.170597,
+        0.117188,
+        0.155464,
+        -0.091541
+      ],
+      "exit_2": [
+        0.212393,
+        -0.164524,
+        0.143972,
+        -0.234217,
+        -0.094334,
+        0.087711,
+        -0.137434,
+        0.148952,
+        0.255672,
+        -0.17522,
+        -0.01731,
+        0.105436,
+        0.016359,
+        0.139823,
+        0.087299,
+        -0.089323
+      ]
+    },
+    "Ve": {
+      "e_ent_a_corr1": [
+        0.722476,
+        0.680595,
+        0.794562,
+        0.632622
+      ],
+      "e_ent_a_corr1__rev": [
+        0.70434,
+        0.66569,
+        0.783146,
+        0.628604
+      ],
+      "e_ent_b_corr2": [
+        0.720234,
+        0.690305,
+        0.795136,
+        0.634072
+      ],
+      "e_ent_b_corr2__rev": [
+        0.705222,
+        0.656839,
+        0.782079,
+        0.627528
+      ],
+      "e_corr1_conc": [
+        0.719532,
+        0.680269,
+        0.785508,
+        0.641751
+      ],
+      "e_corr1_conc__rev": [
+        0.693969,
+        0.64555,
+        0.787108,
+        0.629569
+      ],
+      "e_corr2_conc": [
+        0.727546,
+        0.68673,
+        0.786921,
+        0.630735
+      ],
+      "e_corr2_conc__rev": [
+        0.701249,
+        0.664148,
+        0.787701,
+        0.621966
+      ],
+      "e_conc_exit1": [
+        0.701534,
+        0.660072,
+        0.806926,
+        0.642586
+      ],
+      "e_conc_exit1__rev": [
+        0.698955,
+        0.655007,
+        0.803458,
+        0.637721
+      ],
+      "e_conc_stair1": [
+        0.711762,
+        0.676375,
+        0.798158,
+        0.637688
+      ],
+      "e_conc_stair1__rev": [
+        0.69708,
+        0.656017,
+        0.785456,
+        0.628399
+      ],
+      "e_stair1_exit2": [
+        0.717786,
+        0.677933,
+        0.792274,
+        0.641205
+      ],
+      "e_stair1_exit2__rev": [
+        0.698353,
+        0.653086,
+        0.787386,
+        0.623627
+      ]
+    },
+    "shapes": {
+      "H": [
+        8,
+        16
+      ],
+      "Vn": [
+        8,
+        16
+      ],
+      "Ve": [
+        14,
+        4
+      ]
+    },
+    "zone_ids": [
+      "ent_a",
+      "ent_b",
+      "corridor_1",
+      "corridor_2",
+      "concourse",
+      "stair_1",
+      "exit_1",
+      "exit_2"
+    ],
+    "edge_ids": [
+      "e_ent_a_corr1",
+      "e_ent_a_corr1__rev",
+      "e_ent_b_corr2",
+      "e_ent_b_corr2__rev",
+      "e_corr1_conc",
+      "e_corr1_conc__rev",
+      "e_corr2_conc",
+      "e_corr2_conc__rev",
+      "e_conc_exit1",
+      "e_conc_exit1__rev",
+      "e_conc_stair1",
+      "e_conc_stair1__rev",
+      "e_stair1_exit2",
+      "e_stair1_exit2__rev"
+    ],
+    "version_metadata": {
+      "hypernet_version": "hypernet_v2",
+      "gnn_version": "gnn_edge_v2",
+      "tree_version": "dt_bank_v1",
+      "schema_hash": "0270477b3b14fe6f2b940f0301558b8d65c07fff6f7c51f037dfbb8d357e8dea",
+      "scaler_id": "physical_default",
+      "training_status": "untrained_initial",
+      "pair_id": "5a89a834b0c846258d24e0f316272bb6",
+      "map_version": "v1.0"
+    }
+  },
+  "contract": {
+    "h_dim": 16,
+    "vn_dim": 16,
+    "ve_dim": 4,
+    "num_zones": 8,
+    "num_edges": 14,
+    "zone_ids": [
+      "ent_a",
+      "ent_b",
+      "corridor_1",
+      "corridor_2",
+      "concourse",
+      "stair_1",
+      "exit_1",
+      "exit_2"
+    ],
+    "edge_ids": [
+      "e_ent_a_corr1",
+      "e_ent_a_corr1__rev",
+      "e_ent_b_corr2",
+      "e_ent_b_corr2__rev",
+      "e_corr1_conc",
+      "e_corr1_conc__rev",
+      "e_corr2_conc",
+      "e_corr2_conc__rev",
+      "e_conc_exit1",
+      "e_conc_exit1__rev",
+      "e_conc_stair1",
+      "e_conc_stair1__rev",
+      "e_stair1_exit2",
+      "e_stair1_exit2__rev"
+    ],
+    "dyn_feature_names": [
+      "obs_value_density",
+      "obs_value_speed",
+      "obs_value_inflow",
+      "obs_value_outflow",
+      "obs_value_queue_length",
+      "obs_value_exit_open",
+      "obs_age_density",
+      "obs_age_speed",
+      "obs_age_inflow",
+      "obs_age_outflow",
+      "obs_age_queue_length",
+      "obs_age_exit_open",
+      "report_present_density",
+      "report_present_speed",
+      "report_present_inflow",
+      "report_present_outflow",
+      "report_present_queue_length",
+      "report_present_exit_open",
+      "obs_fresh_density",
+      "obs_fresh_speed",
+      "obs_fresh_inflow",
+      "obs_fresh_outflow",
+      "obs_fresh_queue_length",
+      "obs_fresh_exit_open",
+      "tree_estimated_density",
+      "tree_estimated_speed",
+      "tree_estimated_inflow",
+      "tree_estimated_outflow",
+      "tree_estimated_queue_length",
+      "tree_probability_exit_open",
+      "tree_mask_estimated_density",
+      "tree_mask_estimated_speed",
+      "tree_mask_estimated_inflow",
+      "tree_mask_estimated_outflow",
+      "tree_mask_estimated_queue_length",
+      "tree_mask_probability_exit_open"
+    ],
+    "schema_hash": "0270477b3b14fe6f2b940f0301558b8d65c07fff6f7c51f037dfbb8d357e8dea",
+    "hypernet_version": "hypernet_v2",
+    "gnn_version": "gnn_edge_v2",
+    "hypernet_config": {
+      "dyn_dim": 36,
+      "static_node_dim": 8,
+      "static_edge_dim": 4,
+      "node_out_dim": 16,
+      "edge_out_dim": 4,
+      "hidden_dim": 32
+    },
+    "gnn_config": {
+      "node_in_dim": 16,
+      "edge_in_dim": 4,
+      "hidden_dim": 32,
+      "embed_dim": 16
+    },
+    "scaler_id": "physical_default",
+    "training_status": "untrained_initial",
+    "pair_id": "5a89a834b0c846258d24e0f316272bb6",
+    "edge_values_nonnegative": true
+  },
+  "manifest": {
+    "pipeline_version": "v1.1.0",
+    "spatial_artifact_dir": "spatial/hypernet_v2__gnn_edge_v2__6675c91e",
+    "training_status": {
+      "hypernet": "untrained_initial",
+      "gnn": "untrained_initial",
+      "temporal": "untrained_initial",
+      "tree_bank": "fitted_unvalidated"
+    }
+  },
+  "evidence": {
+    "max_abs_diff_H_vs_gnn(Vn,Ve)": 0.0,
+    "max_abs_change_H_when_Ve_zeroed": 0.6376781463623047,
+    "max_abs_change_H_when_Vn_rows_permuted": 0.34383296966552734,
+    "min_Ve": 0.6219663619995117,
+    "temporal_input_dim": 40,
+    "temporal_input_dim_expected": 40
+  },
+  "warning": "Hypernetwork, GNN and temporal weights are untrained initial weights; values demonstrate the interface and data flow only, not learned spatial meaning."
+}

@@ -226,3 +226,38 @@ That order matters: otherwise, you could spend time tuning a spatial model using
 Your engineering deliverable remains largely complete. The remaining work is now a bounded sequence of data-handoff verification, controlled experiments and joint forecasting validation—not an open-ended instruction to keep adding complexity.
 
 ---
+
+## 7. Spatial inference deliverable and Person 4 compatibility (Person 3)
+
+### Deliverables
+
+| Deliverable | Where | Evidence |
+|---|---|---|
+| Callable spatial inference | `ArchitecturePipeline.spatial_snapshot(as_of_time, recent_observations) -> (SpatialOutput, zone_inputs)`, the same path `step()` uses, without touching the GRU; lower level: `SpatialEncoder.encode_spatial(...)` | `tests/test_spatial_contract.py` |
+| All six tree channels reach the hypernetwork's dynamic input | Feature schema slots `tree_estimated_density` … `tree_probability_exit_open` (+ masks) | Per-channel test on the **active production pair** |
+| Vn[Z,16], Ve[E,4] ≥ 0 (softplus), H[Z,H_dim] | `SpatialOutput.H/Vn/Ve` with `zone_ids` / `edge_ids` row order | Shape and finiteness tests on production artifacts |
+| Checkpoint/manifest match the loaded architecture | `models/production/spatial/hypernet_v2__gnn_edge_v2__6675c91e/`, `manifest.json` | Test compares the saved `config`/`version` with the loaded modules |
+| Sample output for a known scenario and time | `data/demo/spatial_output_sample.json`, from `python -m crowd_reliability.cli export-spatial-sample` (bottleneck_exit_closure, seed 42, t = 150 s, 1,714 observations received by then) | Includes versions, `pair_id`, `training_status`, D, H, Vn, Ve and evidence values |
+| Uses generated values and no reference truth | `spatial_snapshot` accepts only observations and ignores reports received after as_of | Tests: H = gnn(Vn, Ve) exactly; zeroing Ve or scaling Vn changes H; invariant to reference mutation and to late reports |
+
+**Status:** weights are `untrained_initial`. The sample demonstrates the interface and data flow, not learned spatial meaning.
+
+### Actual H dimension: 16, read from the checkpoints
+
+`spatial_contract(encoder)` reads every dimension from the loaded modules' configs: `h_dim` = GNN `embed_dim` = **16**, `vn_dim` = 16, `ve_dim` = 4, Z = 8, E = 14. The main pipeline's temporal model matches it: `input_dim` 40 = 24 + 16.
+
+### Mismatch with `origin/feat/person4` (handoff to Person 4)
+
+The branch's `person4/event_horizon_p4/config.py` sets `H_DIM = 8  # MOCK`. Changing that constant is **not enough**, because the two input vectors also differ in layout and length:
+
+| | Main pipeline `U` (current) | Person 4 branch `U` |
+|---|---|---|
+| Layout | raw(6) · age(6) · obs_mask(6) · D(6) · H(16) | X(6) · D(6) · H(8) · age(6) · obs_mask(6) · tree_mask(6) · exit_mask(1) |
+| Dimension | 40 | 39 (becomes 47 with H = 16) |
+| History | 12 steps (`lookback_steps`) | 60 steps |
+| Tree masks / exit mask in U | no / no | yes / yes |
+
+**What Person 4 needs to do (proposed, owned by Person 4):**
+1. Size the spatial slot from `spatial_contract(...)["h_dim"]` (or the loaded GNN config) instead of a constant, and assert it at load time.
+2. Agree on **one** U layout with the main pipeline. Then the GRU `input_dim`, the U scaler, the trained weights and the manifest all follow from that layout. Any GRU checkpoint must record the `h_dim`, the spatial `pair_id` and the hypernet/GNN versions it was trained with, and refuse to load against a different spatial pair.
+3. Replace `MockTreeOutput` with Person 2's real tree output, and the H mock with `spatial_snapshot(...)`.
