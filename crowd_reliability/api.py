@@ -190,9 +190,8 @@ def get_assessments(
         obs_query = obs_query.filter(ObservationRecord.zone_id == zone_id)
     observations = obs_query.all()
 
-    if not observations:
-        return {"assessments": []}
-
+    # Validate any supplied timestamp before touching the database state, so a
+    # malformed evaluated_at always yields 422 even when observations are empty.
     if evaluated_at:
         try:
             t_eval = datetime.fromisoformat(evaluated_at)
@@ -201,8 +200,10 @@ def get_assessments(
                 status_code=422,
                 detail=f"Invalid ISO 8601 evaluated_at timestamp: '{evaluated_at}'"
             ) from exc
-    else:
+    elif observations:
         t_eval = max(o.received_at for o in observations)
+    else:
+        return {"assessments": []}
 
     # Variables to assess
     variables = ["density", "speed", "inflow", "outflow", "queue_length", "exit_open"]

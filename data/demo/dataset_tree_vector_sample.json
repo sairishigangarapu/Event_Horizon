@@ -1,0 +1,515 @@
+{
+  "scenario_id": "normal_flow_002",
+  "evaluation_time": "2026-10-14T10:00:46",
+  "tree_version": "dt_bank_v2",
+  "feature_schema_version": "obs_only_v1",
+  "scaler_version": "scaler_obs_only_v1",
+  "channel_metadata": [
+    {
+      "name": "estimated_density",
+      "unit": "p/m2",
+      "kind": "regression",
+      "source_variable": "density",
+      "applicability": "all_zones"
+    },
+    {
+      "name": "estimated_speed",
+      "unit": "m/s",
+      "kind": "regression",
+      "source_variable": "speed",
+      "applicability": "all_zones"
+    },
+    {
+      "name": "estimated_inflow",
+      "unit": "p/s",
+      "kind": "regression",
+      "source_variable": "inflow",
+      "applicability": "all_zones"
+    },
+    {
+      "name": "estimated_outflow",
+      "unit": "p/s",
+      "kind": "regression",
+      "source_variable": "outflow",
+      "applicability": "all_zones"
+    },
+    {
+      "name": "estimated_queue_length",
+      "unit": "persons",
+      "kind": "regression",
+      "source_variable": "queue_length",
+      "applicability": "all_zones"
+    },
+    {
+      "name": "probability_exit_open",
+      "unit": "probability",
+      "kind": "classification",
+      "source_variable": "exit_open",
+      "applicability": "exit_zones_only"
+    }
+  ],
+  "zone_ids": [
+    "g_0_0",
+    "g_1_0",
+    "g_2_0",
+    "g_3_0",
+    "g_4_0",
+    "g_5_0",
+    "g_6_0",
+    "g_7_0"
+  ],
+  "values": [
+    [
+      0.0631,
+      0.5106,
+      0.1912,
+      0.1857,
+      0.1066,
+      0.0
+    ],
+    [
+      0.0631,
+      0.5106,
+      0.1912,
+      0.1857,
+      0.1066,
+      0.0
+    ],
+    [
+      0.0631,
+      0.5106,
+      0.1912,
+      0.1857,
+      0.1066,
+      0.0
+    ],
+    [
+      0.0631,
+      0.5106,
+      0.1912,
+      0.1857,
+      0.1066,
+      0.0
+    ],
+    [
+      0.0791,
+      0.8179,
+      0.9318,
+      0.7268,
+      0.5323,
+      0.0
+    ],
+    [
+      0.0631,
+      0.5106,
+      0.1912,
+      0.1857,
+      0.1066,
+      0.0
+    ],
+    [
+      0.0631,
+      0.5106,
+      0.1912,
+      0.1857,
+      0.1066,
+      0.0
+    ],
+    [
+      0.0631,
+      0.5106,
+      0.1912,
+      0.1857,
+      0.1066,
+      1.0
+    ]
+  ],
+  "masks": [
+    [
+      1,
+      1,
+      1,
+      1,
+      1,
+      0
+    ],
+    [
+      1,
+      1,
+      1,
+      1,
+      1,
+      0
+    ],
+    [
+      1,
+      1,
+      1,
+      1,
+      1,
+      0
+    ],
+    [
+      1,
+      1,
+      1,
+      1,
+      1,
+      0
+    ],
+    [
+      1,
+      1,
+      1,
+      1,
+      1,
+      0
+    ],
+    [
+      1,
+      1,
+      1,
+      1,
+      1,
+      0
+    ],
+    [
+      1,
+      1,
+      1,
+      1,
+      1,
+      0
+    ],
+    [
+      1,
+      1,
+      1,
+      1,
+      1,
+      1
+    ]
+  ],
+  "zones": [
+    {
+      "scenario_id": "normal_flow_002",
+      "zone_id": "g_0_0",
+      "evaluation_time": "2026-10-14T10:00:46",
+      "tree_version": "dt_bank_v2",
+      "feature_schema_version": "obs_only_v1",
+      "scaler_version": "scaler_obs_only_v1",
+      "channel_names": [
+        "estimated_density",
+        "estimated_speed",
+        "estimated_inflow",
+        "estimated_outflow",
+        "estimated_queue_length",
+        "probability_exit_open"
+      ],
+      "channel_units": [
+        "p/m2",
+        "m/s",
+        "p/s",
+        "p/s",
+        "persons",
+        "probability"
+      ],
+      "channel_values": [
+        0.0631,
+        0.5106,
+        0.1912,
+        0.1857,
+        0.1066,
+        0.0
+      ],
+      "channel_masks": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        0
+      ]
+    },
+    {
+      "scenario_id": "normal_flow_002",
+      "zone_id": "g_1_0",
+      "evaluation_time": "2026-10-14T10:00:46",
+      "tree_version": "dt_bank_v2",
+      "feature_schema_version": "obs_only_v1",
+      "scaler_version": "scaler_obs_only_v1",
+      "channel_names": [
+        "estimated_density",
+        "estimated_speed",
+        "estimated_inflow",
+        "estimated_outflow",
+        "estimated_queue_length",
+        "probability_exit_open"
+      ],
+      "channel_units": [
+        "p/m2",
+        "m/s",
+        "p/s",
+        "p/s",
+        "persons",
+        "probability"
+      ],
+      "channel_values": [
+        0.0631,
+        0.5106,
+        0.1912,
+        0.1857,
+        0.1066,
+        0.0
+      ],
+      "channel_masks": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        0
+      ]
+    },
+    {
+      "scenario_id": "normal_flow_002",
+      "zone_id": "g_2_0",
+      "evaluation_time": "2026-10-14T10:00:46",
+      "tree_version": "dt_bank_v2",
+      "feature_schema_version": "obs_only_v1",
+      "scaler_version": "scaler_obs_only_v1",
+      "channel_names": [
+        "estimated_density",
+        "estimated_speed",
+        "estimated_inflow",
+        "estimated_outflow",
+        "estimated_queue_length",
+        "probability_exit_open"
+      ],
+      "channel_units": [
+        "p/m2",
+        "m/s",
+        "p/s",
+        "p/s",
+        "persons",
+        "probability"
+      ],
+      "channel_values": [
+        0.0631,
+        0.5106,
+        0.1912,
+        0.1857,
+        0.1066,
+        0.0
+      ],
+      "channel_masks": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        0
+      ]
+    },
+    {
+      "scenario_id": "normal_flow_002",
+      "zone_id": "g_3_0",
+      "evaluation_time": "2026-10-14T10:00:46",
+      "tree_version": "dt_bank_v2",
+      "feature_schema_version": "obs_only_v1",
+      "scaler_version": "scaler_obs_only_v1",
+      "channel_names": [
+        "estimated_density",
+        "estimated_speed",
+        "estimated_inflow",
+        "estimated_outflow",
+        "estimated_queue_length",
+        "probability_exit_open"
+      ],
+      "channel_units": [
+        "p/m2",
+        "m/s",
+        "p/s",
+        "p/s",
+        "persons",
+        "probability"
+      ],
+      "channel_values": [
+        0.0631,
+        0.5106,
+        0.1912,
+        0.1857,
+        0.1066,
+        0.0
+      ],
+      "channel_masks": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        0
+      ]
+    },
+    {
+      "scenario_id": "normal_flow_002",
+      "zone_id": "g_4_0",
+      "evaluation_time": "2026-10-14T10:00:46",
+      "tree_version": "dt_bank_v2",
+      "feature_schema_version": "obs_only_v1",
+      "scaler_version": "scaler_obs_only_v1",
+      "channel_names": [
+        "estimated_density",
+        "estimated_speed",
+        "estimated_inflow",
+        "estimated_outflow",
+        "estimated_queue_length",
+        "probability_exit_open"
+      ],
+      "channel_units": [
+        "p/m2",
+        "m/s",
+        "p/s",
+        "p/s",
+        "persons",
+        "probability"
+      ],
+      "channel_values": [
+        0.0791,
+        0.8179,
+        0.9318,
+        0.7268,
+        0.5323,
+        0.0
+      ],
+      "channel_masks": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        0
+      ]
+    },
+    {
+      "scenario_id": "normal_flow_002",
+      "zone_id": "g_5_0",
+      "evaluation_time": "2026-10-14T10:00:46",
+      "tree_version": "dt_bank_v2",
+      "feature_schema_version": "obs_only_v1",
+      "scaler_version": "scaler_obs_only_v1",
+      "channel_names": [
+        "estimated_density",
+        "estimated_speed",
+        "estimated_inflow",
+        "estimated_outflow",
+        "estimated_queue_length",
+        "probability_exit_open"
+      ],
+      "channel_units": [
+        "p/m2",
+        "m/s",
+        "p/s",
+        "p/s",
+        "persons",
+        "probability"
+      ],
+      "channel_values": [
+        0.0631,
+        0.5106,
+        0.1912,
+        0.1857,
+        0.1066,
+        0.0
+      ],
+      "channel_masks": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        0
+      ]
+    },
+    {
+      "scenario_id": "normal_flow_002",
+      "zone_id": "g_6_0",
+      "evaluation_time": "2026-10-14T10:00:46",
+      "tree_version": "dt_bank_v2",
+      "feature_schema_version": "obs_only_v1",
+      "scaler_version": "scaler_obs_only_v1",
+      "channel_names": [
+        "estimated_density",
+        "estimated_speed",
+        "estimated_inflow",
+        "estimated_outflow",
+        "estimated_queue_length",
+        "probability_exit_open"
+      ],
+      "channel_units": [
+        "p/m2",
+        "m/s",
+        "p/s",
+        "p/s",
+        "persons",
+        "probability"
+      ],
+      "channel_values": [
+        0.0631,
+        0.5106,
+        0.1912,
+        0.1857,
+        0.1066,
+        0.0
+      ],
+      "channel_masks": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        0
+      ]
+    },
+    {
+      "scenario_id": "normal_flow_002",
+      "zone_id": "g_7_0",
+      "evaluation_time": "2026-10-14T10:00:46",
+      "tree_version": "dt_bank_v2",
+      "feature_schema_version": "obs_only_v1",
+      "scaler_version": "scaler_obs_only_v1",
+      "channel_names": [
+        "estimated_density",
+        "estimated_speed",
+        "estimated_inflow",
+        "estimated_outflow",
+        "estimated_queue_length",
+        "probability_exit_open"
+      ],
+      "channel_units": [
+        "p/m2",
+        "m/s",
+        "p/s",
+        "p/s",
+        "persons",
+        "probability"
+      ],
+      "channel_values": [
+        0.0631,
+        0.5106,
+        0.1912,
+        0.1857,
+        0.1066,
+        1.0
+      ],
+      "channel_masks": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    }
+  ]
+}

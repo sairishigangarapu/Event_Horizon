@@ -1,0 +1,50 @@
+{
+  "n_samples": 3648,
+  "scenario_ids": [
+    "bottleneck_000",
+    "bottleneck_001",
+    "counterflow_002",
+    "counterflow_003",
+    "evacuation_000",
+    "evacuation_001",
+    "gradual_congestion_000",
+    "gradual_congestion_002",
+    "normal_flow_001",
+    "normal_flow_003",
+    "sudden_stop_002",
+    "sudden_stop_003"
+  ],
+  "training_cutoff": "2026-10-14T10:00:45",
+  "feature_schema_version": "obs_only_v1",
+  "allowed_inputs": [
+    "observations",
+    "reference_states",
+    "zones"
+  ],
+  "tree_version": "dt_bank_v2",
+  "scaler_version": "scaler_obs_only_v1",
+  "seed": 42,
+  "max_depth": 6,
+  "train_scenario_ids": [
+    "normal_flow_001",
+    "normal_flow_003",
+    "gradual_congestion_000",
+    "gradual_congestion_002",
+    "bottleneck_000",
+    "bottleneck_001",
+    "counterflow_002",
+    "counterflow_003",
+    "sudden_stop_002",
+    "sudden_stop_003",
+    "evacuation_000",
+    "evacuation_001"
+  ],
+  "test_scenario_ids": [
+    "normal_flow_002",
+    "gradual_congestion_001",
+    "bottleneck_002",
+    "counterflow_001",
+    "sudden_stop_001",
+    "evacuation_003"
+  ]
+}
