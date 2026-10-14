@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "event-horizon-p4"
+version = "0.1.0"
+description = "Person 4 – Temporal Forecast, Comparison & Evaluation (Manipal Hackathon 2026)"
+requires-python = ">=3.10"
+readme = "README.md"
+dependencies = [
+    "numpy>=1.26.0",
+    "torch>=2.1.0",
+    "scikit-learn>=1.3.0",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest>=7.4.0",
+    "pytest-cov>=4.1.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["event_horizon_p4*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# Ensure the person4/ directory is always on sys.path regardless of cwd
+pythonpath = ["."]
+addopts    = "-v --tb=short"
+
+[tool.coverage.run]
+source = ["event_horizon_p4"]

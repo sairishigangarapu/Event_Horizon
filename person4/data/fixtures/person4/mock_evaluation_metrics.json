@@ -1,0 +1,137 @@
+{
+  "numeric": [
+    {
+      "variable": "density",
+      "horizon_sec": 30,
+      "n": 498,
+      "mae": 0.52329,
+      "rmse": 0.59375
+    },
+    {
+      "variable": "density",
+      "horizon_sec": 60,
+      "n": 462,
+      "mae": 0.55664,
+      "rmse": 0.68733
+    },
+    {
+      "variable": "density",
+      "horizon_sec": 120,
+      "n": 390,
+      "mae": 0.62334,
+      "rmse": 0.77007
+    },
+    {
+      "variable": "inflow",
+      "horizon_sec": 30,
+      "n": 498,
+      "mae": 0.659,
+      "rmse": 0.75048
+    },
+    {
+      "variable": "inflow",
+      "horizon_sec": 60,
+      "n": 462,
+      "mae": 0.86767,
+      "rmse": 1.07377
+    },
+    {
+      "variable": "inflow",
+      "horizon_sec": 120,
+      "n": 390,
+      "mae": 1.06338,
+      "rmse": 1.24231
+    },
+    {
+      "variable": "outflow",
+      "horizon_sec": 30,
+      "n": 498,
+      "mae": 0.83598,
+      "rmse": 1.02768
+    },
+    {
+      "variable": "outflow",
+      "horizon_sec": 60,
+      "n": 462,
+      "mae": 0.64289,
+      "rmse": 0.81549
+    },
+    {
+      "variable": "outflow",
+      "horizon_sec": 120,
+      "n": 390,
+      "mae": 0.79921,
+      "rmse": 0.98052
+    },
+    {
+      "variable": "queue_length",
+      "horizon_sec": 30,
+      "n": 498,
+      "mae": 1.36219,
+      "rmse": 1.59229
+    },
+    {
+      "variable": "queue_length",
+      "horizon_sec": 60,
+      "n": 462,
+      "mae": 2.65492,
+      "rmse": 2.89807
+    },
+    {
+      "variable": "queue_length",
+      "horizon_sec": 120,
+      "n": 390,
+      "mae": 4.02649,
+      "rmse": 4.18923
+    },
+    {
+      "variable": "speed",
+      "horizon_sec": 30,
+      "n": 498,
+      "mae": 0.31119,
+      "rmse": 0.38455
+    },
+    {
+      "variable": "speed",
+      "horizon_sec": 60,
+      "n": 462,
+      "mae": 0.28544,
+      "rmse": 0.35124
+    },
+    {
+      "variable": "speed",
+      "horizon_sec": 120,
+      "n": 390,
+      "mae": 0.29226,
+      "rmse": 0.35474
+    }
+  ],
+  "exit_cls": [
+    {
+      "variable": "exit_open",
+      "horizon_sec": 30,
+      "n": 166,
+      "accuracy": 0.91566,
+      "brier_score": 0.09326
+    },
+    {
+      "variable": "exit_open",
+      "horizon_sec": 60,
+      "n": 154,
+      "accuracy": 0.92208,
+      "brier_score": 0.11929
+    },
+    {
+      "variable": "exit_open",
+      "horizon_sec": 120,
+      "n": 130,
+      "accuracy": 0.90769,
+      "brier_score": 0.18894
+    }
+  ],
+  "n_matched": 7200,
+  "n_label_wait": 0,
+  "n_no_label": 1344,
+  "WARNING": "SYNTHETIC FIXTURE ONLY \u2014 NOT VALIDATED. Do NOT use for real emergency decisions.",
+  "scenario_id": "sc_test_01"
+}
