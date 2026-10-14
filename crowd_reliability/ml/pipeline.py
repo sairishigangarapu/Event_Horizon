@@ -1,5 +1,6 @@
 import os
 import uuid
+import hashlib
 import numpy as np
 import torch
 from datetime import datetime, timezone, timedelta
@@ -14,6 +15,13 @@ from crowd_reliability.ml.tree_bank import DecisionTreeBank, TREE_CHANNELS
 from crowd_reliability.ml.graph import SpatialGraphBuilder, SpatialGNN, GraphHyperNetwork
 from crowd_reliability.ml.temporal import MultivariateTemporalForecaster, TARGET_VAR_NAMES
 from crowd_reliability.simulation.scenarios import VenueLayout, get_default_venue
+
+def _calc_sha256(filepath: str) -> str:
+    h = hashlib.sha256()
+    with open(filepath, "rb") as f:
+        while chunk := f.read(65536):
+            h.update(chunk)
+    return h.hexdigest()
 
 class ArchitecturePipeline:
     """
@@ -266,25 +274,52 @@ class ArchitecturePipeline:
 
     def save_pipeline(self, model_dir: str):
         os.makedirs(model_dir, exist_ok=True)
-        self.tree_bank.save(os.path.join(model_dir, "tree_bank.joblib"))
-        self.hypernet.save(os.path.join(model_dir, "hypernet.pt"))
-        self.gnn.save(os.path.join(model_dir, "gnn.pt"))
-        self.temporal_model.save(os.path.join(model_dir, "temporal_model.pt"))
+        tb_path = os.path.join(model_dir, "tree_bank.joblib")
+        hn_path = os.path.join(model_dir, "hypernet.pt")
+        gnn_path = os.path.join(model_dir, "gnn.pt")
+        tm_path = os.path.join(model_dir, "temporal_model.pt")
+
+        self.tree_bank.save(tb_path)
+        self.hypernet.save(hn_path)
+        self.gnn.save(gnn_path)
+        self.temporal_model.save(tm_path)
+
+        self.manifest.model_hashes = {
+            "tree_bank.joblib": _calc_sha256(tb_path),
+            "hypernet.pt": _calc_sha256(hn_path),
+            "gnn.pt": _calc_sha256(gnn_path),
+            "temporal_model.pt": _calc_sha256(tm_path),
+        }
         self.manifest.save(os.path.join(model_dir, "manifest.json"))
 
     def load_pipeline(self, model_dir: str):
         manifest_path = os.path.join(model_dir, "manifest.json")
         if os.path.exists(manifest_path):
             self.manifest = PipelineManifest.load(manifest_path)
+
+        def _verify_file(filename: str, filepath: str):
+            if filename in self.manifest.model_hashes:
+                expected = self.manifest.model_hashes[filename]
+                actual = _calc_sha256(filepath)
+                if expected != actual:
+                    raise ValueError(f"Model integrity verification failed for {filename}")
+
         tb_path = os.path.join(model_dir, "tree_bank.joblib")
         if os.path.exists(tb_path):
+            _verify_file("tree_bank.joblib", tb_path)
             self.tree_bank.load(tb_path)
+
         hn_path = os.path.join(model_dir, "hypernet.pt")
         if os.path.exists(hn_path):
+            _verify_file("hypernet.pt", hn_path)
             self.hypernet.load(hn_path)
+
         gnn_path = os.path.join(model_dir, "gnn.pt")
         if os.path.exists(gnn_path):
+            _verify_file("gnn.pt", gnn_path)
             self.gnn.load(gnn_path)
+
         tm_path = os.path.join(model_dir, "temporal_model.pt")
         if os.path.exists(tm_path):
+            _verify_file("temporal_model.pt", tm_path)
             self.temporal_model = MultivariateTemporalForecaster.load(tm_path)

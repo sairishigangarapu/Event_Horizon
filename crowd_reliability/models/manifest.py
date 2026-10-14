@@ -15,6 +15,7 @@ class PipelineManifest(BaseModel):
     training_cutoff: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     scenario_split: str = "production"
     is_active: bool = True
+    model_hashes: Dict[str, str] = Field(default_factory=dict)
     metrics_summary: Optional[Dict[str, Any]] = None
 
     def save(self, filepath: str):

@@ -38,9 +38,16 @@ app = FastAPI(
     lifespan=lifespan
 )
 
+ALLOWED_ORIGINS = [
+    "http://127.0.0.1:8501",
+    "http://localhost:8501",
+    "http://127.0.0.1:8000",
+    "http://localhost:8000",
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -118,7 +125,8 @@ def get_active_manifest(db: Session = Depends(get_db)):
         "scaler_version": manifest_rec.scaler_version,
         "schema_version": manifest_rec.schema_version,
         "training_cutoff": manifest_rec.training_cutoff.isoformat() if manifest_rec.training_cutoff else None,
-        "scenario_split": manifest_rec.scenario_split
+        "scenario_split": manifest_rec.scenario_split,
+        "model_hashes": manifest_rec.model_hashes or {}
     }
 
 @app.get("/api/forecasts")
@@ -126,6 +134,8 @@ def get_forecasts(
     scenario_id: str = "crowd_surge",
     zone_id: Optional[str] = None,
     variable: Optional[str] = None,
+    limit: int = Query(default=500, ge=1, le=5000),
+    offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db)
 ):
     query = db.query(ForecastRecord).filter(ForecastRecord.scenario_id == scenario_id)
@@ -139,11 +149,16 @@ def get_forecasts(
     cent_recs = [r for r in records if r.stream_id == "stream_a_central"]
 
     diffs = comparator.align_and_compare(arch_recs, cent_recs)
+    total_comparisons = len(diffs)
+    paginated_diffs = diffs[offset : offset + limit]
 
     return {
         "scenario_id": scenario_id,
         "zone_id": zone_id,
         "variable": variable,
+        "total_comparisons": total_comparisons,
+        "limit": limit,
+        "offset": offset,
         "count_arch": len(arch_recs),
         "count_cent": len(cent_recs),
         "comparisons": [
@@ -159,7 +174,7 @@ def get_forecasts(
                 "arch_issue_time": d.arch_forecast.issued_at.isoformat() if d.arch_forecast else None,
                 "cent_issue_time": d.cent_forecast.issued_at.isoformat() if d.cent_forecast else None,
             }
-            for d in diffs
+            for d in paginated_diffs
         ]
     }
 
@@ -178,7 +193,16 @@ def get_assessments(
     if not observations:
         return {"assessments": []}
 
-    t_eval = datetime.fromisoformat(evaluated_at) if evaluated_at else max(o.received_at for o in observations)
+    if evaluated_at:
+        try:
+            t_eval = datetime.fromisoformat(evaluated_at)
+        except (ValueError, TypeError) as exc:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Invalid ISO 8601 evaluated_at timestamp: '{evaluated_at}'"
+            ) from exc
+    else:
+        t_eval = max(o.received_at for o in observations)
 
     # Variables to assess
     variables = ["density", "speed", "inflow", "outflow", "queue_length", "exit_open"]

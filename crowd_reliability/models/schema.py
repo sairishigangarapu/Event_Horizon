@@ -109,3 +109,4 @@ class ModelManifestRecord(Base):
     scenario_split = Column(String, nullable=False)  # train, val, test, production
     is_active = Column(Boolean, nullable=False, default=False)
     metrics_summary = Column(JSON, nullable=True)
+    model_hashes = Column(JSON, nullable=True)

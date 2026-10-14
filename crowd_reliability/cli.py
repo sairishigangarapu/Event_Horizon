@@ -157,7 +157,8 @@ def cmd_seed_demo(seed: int = 42):
             schema_version=pipeline.manifest.schema_version,
             training_cutoff=datetime.now(timezone.utc),
             scenario_split="production",
-            is_active=True
+            is_active=True,
+            model_hashes=pipeline.manifest.model_hashes
         )
         db.merge(manifest_rec)
         db.commit()

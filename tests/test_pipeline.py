@@ -52,5 +52,14 @@ def test_pipeline_step_and_serialization():
         new_pipeline = ArchitecturePipeline(venue=venue)
         new_pipeline.load_pipeline(tmp_dir)
         assert new_pipeline.manifest.pipeline_version == pipeline.manifest.pipeline_version
+
+        # 4. Test integrity verification: tampering with a model file raises ValueError
+        with open(os.path.join(tmp_dir, "hypernet.pt"), "ab") as f:
+            f.write(b"corrupted_tampered_bytes")
+
+        corrupt_pipeline = ArchitecturePipeline(venue=venue)
+        with pytest.raises(ValueError, match="Model integrity verification failed"):
+            corrupt_pipeline.load_pipeline(tmp_dir)
     finally:
         shutil.rmtree(tmp_dir)
+

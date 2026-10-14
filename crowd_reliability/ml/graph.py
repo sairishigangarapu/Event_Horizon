@@ -118,7 +118,7 @@ class GraphHyperNetwork(nn.Module):
         torch.save({"state_dict": self.state_dict(), "version": self.version}, filepath)
 
     def load(self, filepath: str):
-        checkpoint = torch.load(filepath, map_location="cpu")
+        checkpoint = torch.load(filepath, map_location="cpu", weights_only=True)
         self.load_state_dict(checkpoint["state_dict"])
         self.version = checkpoint.get("version", self.version)
 
@@ -181,6 +181,6 @@ class SpatialGNN(nn.Module):
         torch.save({"state_dict": self.state_dict(), "version": self.version}, filepath)
 
     def load(self, filepath: str):
-        checkpoint = torch.load(filepath, map_location="cpu")
+        checkpoint = torch.load(filepath, map_location="cpu", weights_only=True)
         self.load_state_dict(checkpoint["state_dict"])
         self.version = checkpoint.get("version", self.version)

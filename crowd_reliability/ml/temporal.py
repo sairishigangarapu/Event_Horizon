@@ -101,7 +101,7 @@ class MultivariateTemporalForecaster(nn.Module):
 
     @classmethod
     def load(cls, filepath: str) -> "MultivariateTemporalForecaster":
-        checkpoint = torch.load(filepath, map_location="cpu")
+        checkpoint = torch.load(filepath, map_location="cpu", weights_only=True)
         model = cls(
             input_dim=checkpoint["input_dim"],
             hidden_dim=checkpoint["hidden_dim"],
