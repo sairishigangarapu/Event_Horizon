@@ -45,6 +45,7 @@ def test_pipeline_step_and_serialization():
         pipeline.save_pipeline(tmp_dir)
         assert os.path.exists(os.path.join(tmp_dir, "manifest.json"))
         assert os.path.exists(os.path.join(tmp_dir, "tree_bank.joblib"))
+        assert os.path.exists(os.path.join(tmp_dir, "hypernet.pt"))
         assert os.path.exists(os.path.join(tmp_dir, "gnn.pt"))
         assert os.path.exists(os.path.join(tmp_dir, "temporal_model.pt"))
 

@@ -22,7 +22,7 @@
 During a crowd emergency, observations and forecasts may stop reflecting the current situation. This project uses crowd-disaster simulations to assess report freshness, conflicts and changing conditions, and compares two forecast streams:
 
 1. A forecast supplied by a configured central source.
-2. A forecast generated from separate decision-tree output channels, spatial GNN context and multivariate temporal forecasting.
+2. A forecast generated from separate decision-tree output channels, a hypernetwork that generates GNN node and edge values, spatial GNN context and multivariate temporal forecasting.
 
 Density, speed, inflow, outflow, queue length and exit availability remain separate inputs and outputs. Decision-tree values are never collapsed into a single signal before forecasting. The dashboard preserves both forecast streams and their channel-specific differences.
 
@@ -47,6 +47,7 @@ The following is a reference implementation choice, not an inventory of verified
 | Data handling | NumPy, pandas |
 | Tree bank | scikit-learn decision-tree estimators |
 | Graph learning | PyTorch and PyTorch Geometric |
+| Node/edge value generation | PyTorch MLP hypernetwork (`GraphHyperNetwork`) feeding the GNN |
 | Temporal forecasting | PyTorch GRU with separate numeric and exit-state heads |
 | API | FastAPI and Uvicorn |
 | Evaluator dashboard | Streamlit and Plotly |
@@ -220,6 +221,7 @@ Expected test coverage:
 - Schema, timestamp, unit and zone-ID handling.
 - Preservation of every decision-tree channel in temporal inputs.
 - Graph and history-window construction.
+- Hypernetwork output shapes, edge-value non-negativity and dependence on the observed state, including the tree channels.
 - Forecast alignment by zone, variable and target timestamp.
 - Separation of central and architecture forecast records.
 - Reference-based scoring by variable and horizon.

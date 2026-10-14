@@ -150,6 +150,7 @@ def cmd_seed_demo(seed: int = 42):
         manifest_rec = ModelManifestRecord(
             pipeline_version=pipeline.manifest.pipeline_version,
             tree_version=pipeline.manifest.tree_version,
+            hypernet_version=pipeline.manifest.hypernet_version,
             gnn_version=pipeline.manifest.gnn_version,
             temporal_version=pipeline.manifest.temporal_version,
             scaler_version=pipeline.manifest.scaler_version,

@@ -11,7 +11,7 @@ from crowd_reliability.models.schema import (
 )
 from crowd_reliability.models.manifest import PipelineManifest
 from crowd_reliability.ml.tree_bank import DecisionTreeBank, TREE_CHANNELS
-from crowd_reliability.ml.graph import SpatialGraphBuilder, SpatialGNN
+from crowd_reliability.ml.graph import SpatialGraphBuilder, SpatialGNN, GraphHyperNetwork
 from crowd_reliability.ml.temporal import MultivariateTemporalForecaster, TARGET_VAR_NAMES
 from crowd_reliability.simulation.scenarios import VenueLayout, get_default_venue
 
@@ -38,10 +38,27 @@ class ArchitecturePipeline:
         self.tree_bank = DecisionTreeBank()
         self.graph_builder = SpatialGraphBuilder(self.venue.zones, self.venue.connections)
 
-        # Node feature dim calculation:
+        # Dynamic context dim fed to the hypernetwork:
         # Raw observed values (6) + ages (6) + masks (6) + tree values (6) = 24
         self.node_in_dim = 24
-        self.gnn = SpatialGNN(node_in_dim=self.node_in_dim, edge_in_dim=2, hidden_dim=32, embed_dim=16)
+
+        # Hypernetwork generates the node values and edge values the GNN operates on
+        self.hypernet = GraphHyperNetwork(
+            dyn_dim=self.node_in_dim,
+            static_node_dim=self.graph_builder.node_static.size(1),
+            static_edge_dim=self.graph_builder.edge_attr.size(1),
+            node_out_dim=16,
+            edge_out_dim=4,
+            hidden_dim=32
+        )
+        self.gnn = SpatialGNN(
+            node_in_dim=self.hypernet.node_out_dim,
+            edge_in_dim=self.hypernet.edge_out_dim,
+            hidden_dim=32,
+            embed_dim=16
+        )
+        # Most recent hypernetwork outputs, retained for inspection/export
+        self.last_generated: Dict[str, np.ndarray] = {}
 
         # Temporal input dim:
         # X (18) + D (6) + H (16) = 40
@@ -154,14 +171,24 @@ class ArchitecturePipeline:
             node_feat = np.concatenate([raw_vals, norm_ages, obs_masks, np.array(d_vals, dtype=np.float32)])
             node_features_list.append(node_feat)
 
-        # 2. Spatial GNN contextualization
-        x_tensor = torch.tensor(np.array(node_features_list), dtype=torch.float32)
+        # 2. Hypernetwork generates node values and edge values, then GNN contextualizes them
+        dyn_ctx = torch.tensor(np.array(node_features_list), dtype=torch.float32)
         with torch.no_grad():
-            h_embeddings = self.gnn(
-                x_tensor,
+            node_values, edge_values = self.hypernet(
+                dyn_ctx,
+                self.graph_builder.node_static,
                 self.graph_builder.edge_index,
                 self.graph_builder.edge_attr
+            )
+            h_embeddings = self.gnn(
+                node_values,
+                self.graph_builder.edge_index,
+                edge_values
             ).cpu().numpy()  # [num_zones, 16]
+        self.last_generated = {
+            "node_values": node_values.cpu().numpy(),
+            "edge_values": edge_values.cpu().numpy(),
+        }
 
         # 3. Assemble U[z, t] vector per zone and update history
         if scenario_id not in self.history_buffer:
@@ -240,6 +267,7 @@ class ArchitecturePipeline:
     def save_pipeline(self, model_dir: str):
         os.makedirs(model_dir, exist_ok=True)
         self.tree_bank.save(os.path.join(model_dir, "tree_bank.joblib"))
+        self.hypernet.save(os.path.join(model_dir, "hypernet.pt"))
         self.gnn.save(os.path.join(model_dir, "gnn.pt"))
         self.temporal_model.save(os.path.join(model_dir, "temporal_model.pt"))
         self.manifest.save(os.path.join(model_dir, "manifest.json"))
@@ -251,6 +279,9 @@ class ArchitecturePipeline:
         tb_path = os.path.join(model_dir, "tree_bank.joblib")
         if os.path.exists(tb_path):
             self.tree_bank.load(tb_path)
+        hn_path = os.path.join(model_dir, "hypernet.pt")
+        if os.path.exists(hn_path):
+            self.hypernet.load(hn_path)
         gnn_path = os.path.join(model_dir, "gnn.pt")
         if os.path.exists(gnn_path):
             self.gnn.load(gnn_path)

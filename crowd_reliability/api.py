@@ -112,6 +112,7 @@ def get_active_manifest(db: Session = Depends(get_db)):
     return {
         "pipeline_version": manifest_rec.pipeline_version,
         "tree_version": manifest_rec.tree_version,
+        "hypernet_version": manifest_rec.hypernet_version,
         "gnn_version": manifest_rec.gnn_version,
         "temporal_version": manifest_rec.temporal_version,
         "scaler_version": manifest_rec.scaler_version,

@@ -374,6 +374,7 @@ with tab_manifest:
         man_dict = {
             "Pipeline Version": manifest.pipeline_version,
             "Decision Tree Bank Version": manifest.tree_version,
+            "Graph Hypernetwork Version": manifest.hypernet_version,
             "Spatial GNN Version": manifest.gnn_version,
             "Multivariate Forecaster Version": manifest.temporal_version,
             "Scaler Version": manifest.scaler_version,

@@ -100,6 +100,7 @@ class ModelManifestRecord(Base):
 
     pipeline_version = Column(String, primary_key=True)
     tree_version = Column(String, nullable=False)
+    hypernet_version = Column(String, nullable=False, default="hypernet_v1")
     gnn_version = Column(String, nullable=False)
     temporal_version = Column(String, nullable=False)
     scaler_version = Column(String, nullable=False)

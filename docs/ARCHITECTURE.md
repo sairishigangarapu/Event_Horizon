@@ -12,7 +12,7 @@ The system assesses whether crowd-related information remains useful as simulate
 The scope covers crowd density, speed, directional flow, queue length and exit availability across a venue's zones. The system presents two distinguishable forecast streams:
 
 - **Stream A — central-source forecast:** imported forecast values from the configured central source.
-- **Stream B — architecture forecast:** values produced by the decision-tree bank, spatial GNN and temporal forecasting pipeline.
+- **Stream B — architecture forecast:** values produced by the decision-tree bank, graph hypernetwork, spatial GNN and temporal forecasting pipeline.
 
 The central source has not yet been identified. “Central” denotes the configured upstream provider; it does not imply an official authority or guaranteed correctness. In a self-contained demonstration, a replay fixture or separate baseline can stand in for this source and must be labelled accordingly.
 
@@ -38,11 +38,11 @@ These are proposed tree targets: each tree estimates one component of the curren
 Exit availability applies only to relevant zones; use an applicability mask elsewhere. Missing channels retain an explicit missing-data mask rather than being replaced with a meaningful zero.
 
 The tree vector is:
-1. Part of the node input to the GNN.
+1. Part of the dynamic context input to the graph hypernetwork, which generates the node values the GNN operates on.
 2. Passed directly into the temporal forecaster at every time step.
 3. Retained in stored records and evaluator exports.
 
-GNN embeddings may encode spatial context, but the direct tree-vector path preserves access to every original channel.
+GNN embeddings and hypernetwork-generated values may encode spatial context, but the direct tree-vector path preserves access to every original channel.
 
 ## 3. Architecture diagram
 
@@ -56,7 +56,8 @@ flowchart TD
         OBS --> DT["Decision-tree bank: separate output channels"]
         OBS --> GRAPH["Observed spatial graph"]
         DT --> GRAPH
-        GRAPH --> GNN["Frozen production GNN"]
+        GRAPH --> HYPER["Graph hypernetwork: generates node and edge values"]
+        HYPER --> GNN["Frozen production GNN"]
         GNN --> TS["Multivariate temporal forecaster"]
         DT -->|"Full vector at each time step"| TS
         OBS -->|"Observation history and masks"| TS
@@ -73,15 +74,17 @@ flowchart TD
     ADAPTER --> LOG
     LOG --> EVAL["Reference-based evaluation"]
     TRUTH --> EVAL
-    EVAL --> TRAIN["Candidate training and replay"]
+    EVAL --> TRAIN["Candidate copy: train hypernetwork and GNN on forecast errors"]
     TRAIN --> GATE{"Scenario validation passes?"}
-    GATE -->|"Versioned pipeline promotion"| DT
+    MCRUN["Monte Carlo scenarios: observations and reference labels"] --> TREEFT["Decision-tree fine-tuning"]
+    TREEFT -->|"Versioned tree release"| DT
+    GATE -->|"Versioned pipeline promotion"| HYPER
     GATE -->|"Versioned pipeline promotion"| GNN
-    GATE -->|"Versioned pipeline promotion"| TS
+    %% The temporal forecaster is not updated by this feedback loop
     GATE -->|"No: retain active version"| KEEP["Current production remains active"]
 ```
 
-The three promotion arrows represent one atomic release of the tree bank, GNN and temporal forecaster with their preprocessing and schema. They are not independent live edits.
+The gate promotes the hypernetwork and GNN together as one atomic release, because the GNN consumes the hypernetwork's generated values; they are not independent live edits. Forecast errors feed back only into this pair. The decision-tree bank is fine-tuned separately from Monte Carlo scenario data and reference labels. It receives no forecast-error feedback, and nothing flows back from the trees to the hypernetwork: the tree vector D enters the hypernetwork as a forward input only. The temporal forecaster is not changed by the loop. Every release produces a new pipeline version that records all component versions.
 
 ## 4. Component responsibilities
 
@@ -92,7 +95,8 @@ The three promotion arrows represent one atomic release of the tree bank, GNN an
 | Normalizer | Match zones, units, clock fields and report identities | Structured observation records |
 | Decision-tree bank | Estimate separate current-state variables from observed context | Named multivariate vector D |
 | Spatial graph builder | Connect zones through physical pedestrian routes | As-of node features and edge attributes |
-| Production GNN | Encode relationships between connected zones | Spatial embedding per zone and time |
+| Graph hypernetwork | Generate the node values and edge values the GNN operates on, conditioned on static zone/link descriptors and the current observed state including the full tree vector | Node values and edge values per zone/link and time |
+| Production GNN | Encode relationships between connected zones over the generated node and edge values | Spatial embedding per zone and time |
 | Temporal forecaster | Learn temporal evolution from full tree vectors, observations and embeddings | Architecture forecast tensor |
 | Central-source adapter | Import and standardize upstream forecasts without relabelling them as truth | Central forecast records |
 | Comparison service | Align forecasts and compute variable-specific differences | Paired forecasts and difference vectors |
@@ -114,12 +118,22 @@ The three promotion arrows represent one atomic release of the tree bank, GNN an
 
 Geographic segmentation is defined by the venue map. The initial tree bank operates on zone features; it does not need to discover the venue layout.
 
+### Graph hypernetwork
+
+The GNN does not consume hand-built node features and static edge attributes directly. A hypernetwork generates both from context:
+
+- **Node values** Vn[z,t] (16-dimensional) are generated per zone from the zone's static descriptors (zone-type one-hot, normalized capacity and area, exit flag) and its dynamic context: observed variables, observation ages, missing-data masks and the full six-channel tree vector D[z,t].
+- **Edge values** Ve[e,t] (4-dimensional, non-negative through a softplus output) are generated per connection from the link's static geometry (normalized width and distance) and the latent codes of its two endpoint zones. A link's effective behaviour, for example a capacity-like or flow-resistance-like quantity, therefore depends on the current state of the zones it joins.
+
+The hypernetwork is a small MLP: a shared node encoder, a node head, and an edge encoder and head that read both endpoint codes. D[z,t] enters it unreduced and still reaches the temporal forecaster through the direct path. The generated values are retained for inspection and are not used to replace any displayed forecast output. The hypernetwork is versioned and promoted with the rest of the pipeline.
+
 ### Forecasting input and output
 
 Let X[t] be the observed node features, E[t] the edge attributes and A[t] the observed adjacency.
 
 ```text
-H[t] = GNN(X[t], D[t], A[t], E[t])
+(Vn[t], Ve[t]) = HyperNet(S_node, X[t], D[t], S_edge, A[t])
+H[t] = GNN(Vn[t], A[t], Ve[t])
 
 U[z,t] = concatenate(
     X[z,t],
@@ -143,7 +157,7 @@ Each target remains identifiable. Density, speed, inflow, outflow and queue leng
 
 **Illustrative initial configuration:** 5-second observation steps, a 60-step history window, and horizons of 30, 60 and 120 seconds. These are tunable design defaults, not experimentally selected values.
 
-A two-layer edge-aware GNN and a small GRU are proposed starting models. Numeric scaling is fitted on training data and inverted for display. The tree bank, scalers, feature order and target definitions are versioned with the neural models.
+A small MLP hypernetwork, a two-layer edge-aware GNN and a small GRU are proposed starting models. Numeric scaling is fitted on training data and inverted for display. The tree bank, scalers, feature order and target definitions are versioned with the neural models.
 
 ## 6. Two-stream forecast comparison
 
@@ -178,7 +192,8 @@ flowchart TD
     P3 --> D2[("Named tree-output vectors by zone and time")]
     P2 --> P4["4. Construct observed zone graphs"]
     D2 --> P4
-    P4 --> P5["5. Encode spatial context with GNN"]
+    P4 --> PH["4b. Generate node values and edge values with hypernetwork"]
+    PH --> P5["5. Encode spatial context with GNN over generated values"]
     P5 --> P6["6. Assemble rolling multivariate windows"]
     D2 -->|"All channels preserved"| P6
     P2 -->|"Raw observations, ages and masks"| P6
@@ -199,8 +214,10 @@ flowchart TD
     D4 --> P10
     D5 --> P10
     P10 --> D6[("Metrics and labelled replay examples")]
-    D6 --> P11["11. Train and validate a candidate pipeline"]
+    D6 --> P11["11. Train a candidate copy of the hypernetwork and GNN on forecast errors, then validate"]
     P11 --> D7[("Versioned model registry")]
+    MCD["Monte Carlo scenario data and reference labels"] --> P12["12. Fine-tune decision-tree bank"]
+    P12 --> D7
 ```
 
 ## 8. Data contracts
@@ -214,7 +231,7 @@ flowchart TD
 | Forecast | forecast_id, stream_id, scenario_id, zone_id, variable, unit, issued_at, received_at, target_at, value, model_or_provider_version |
 | Reference state | scenario_id, zone_id, variable, value, unit, state_at, label_available_at |
 | Assessment | report_id or forecast_id, evaluated_at, observation_age, conflict_ids, coverage, per_variable_flags |
-| Model manifest | pipeline_version, tree_version, gnn_version, temporal_version, scaler_version, schema_version, training_cutoff, scenario_split |
+| Model manifest | pipeline_version, tree_version, hypernet_version, gnn_version, temporal_version, scaler_version, schema_version, training_cutoff, scenario_split |
 
 Store times in UTC and preserve simulation time explicitly when replay uses a relative clock. Retain source timestamps rather than assigning receipt time as observation time.
 
@@ -222,22 +239,45 @@ Store times in UTC and preserve simulation time explicitly when replay uses a re
 
 1. Generate or replay scenarios with reference state archived separately.
 2. Build training inputs exclusively from the observed stream available at each prediction time.
-3. Train the tree bank against its documented per-variable current-state targets.
+3. Train and fine-tune the tree bank on Monte Carlo scenario data against its documented per-variable current-state targets (section 10).
 4. Produce chronological out-of-sample tree outputs for neural-model training.
-5. Train the GNN and temporal model on sequences of observed features, tree vectors and spatial context; supervise forecasts using reference outcomes at their target times.
+5. Train the hypernetwork, GNN and temporal model on sequences of observed features, tree vectors and spatial context; supervise forecasts using reference outcomes at their target times.
 6. Log production predictions with all required versions before receiving their labels.
 7. When labels become available, calculate per-variable forecast errors and create labelled replay examples.
-8. Train a candidate neural pipeline using new examples and representative replay cases while upstream tree versions are fixed.
-9. Periodically refit the tree bank on its original target definitions, then rebuild compatible neural inputs and validate the full candidate.
-10. Promote the complete versioned pipeline only after the defined validation criteria pass.
+8. Copy the production hypernetwork and GNN and train the candidate copy on forecast errors and representative replay cases, with the tree bank and temporal forecaster held fixed.
+9. Fine-tune the decision trees separately, using only Monte Carlo scenario data and simulator reference labels. Forecast errors are not fed to the trees, and nothing is fed back from the trees to the hypernetwork. A new tree version is validated for compatibility with the active hypernetwork and GNN before release.
+10. Promote the hypernetwork and GNN candidate as one versioned release only after the defined validation criteria pass. The new pipeline version records every component version.
 
-Production and training use independently loaded model state. Prediction errors identify cases for analysis and training, but do not substitute for target labels. Include labelled correct predictions as well as incorrect ones.
+Production and training use independently loaded model state; the candidate is a copy, and production stays frozen until promotion.
+
+There are two separate update paths:
+
+- **Decision trees:** fine-tuned only from Monte Carlo scenario data against simulator reference labels (section 10). They receive no forecast-error feedback.
+- **Hypernetwork and GNN:** the only components in the feedback loop. Forecast errors from production replay train a candidate copy of the pair, which is promoted together after validation. The tree vector D enters the hypernetwork as a forward input only; nothing is fed back from the trees to the hypernetwork. The temporal forecaster is not changed by the loop.
+
+Forecast errors identify cases for training the hypernetwork and GNN, but do not substitute for target labels. Include labelled correct predictions as well as incorrect ones.
+
+```mermaid
+flowchart LR
+    MC["Monte Carlo scenarios: observations and reference labels"] --> FT["Decision-tree fine-tuning"]
+    FT --> TREES["Decision-tree bank"]
+    TREES -->|"D[z,t], forward input only"| HN["Hypernetwork"]
+    HN --> GNN["GNN"]
+    GNN --> FC["Forecast"]
+    FC --> ERR["Forecast errors vs reference"]
+    ERR --> CAND["Candidate copy of hypernetwork and GNN"]
+    CAND --> VAL{"Validation passes?"}
+    VAL -->|"Yes: promote the pair together"| HN
+    VAL -->|"No: keep current production"| HN
+```
 
 Numeric heads can use scaled MSE or Huber loss; the exit head can use binary cross-entropy. A scalar optimization loss is permitted: it combines training objectives, **not the decision-tree input channels or the displayed forecast outputs**.
 
 ## 10. Monte Carlo scenario evaluation
 
 Vary crowd arrival rates, destination preferences, route choices, exit restrictions, observation intervals, delays and outages through seeded scenarios. Record the sampled parameters with every run.
+
+The role of the Monte Carlo runs is to provide data for fine-tuning the decision trees. Each run supplies the observed stream as tree inputs and the simulator's reference current-state values as tree targets. Monte Carlo runs do not train or select the hypernetwork or GNN, and forecast errors are not used to fine-tune the trees.
 
 Use disjoint training, validation and final-test scenario sets. Hold out full scenario seeds and, where possible, venue layouts. Evaluate across scenarios and report variable-specific results. Select candidate models using aggregate validation criteria and scenario-group checks, then evaluate the selected version on the reserved test set.
 
@@ -253,7 +293,9 @@ Simulator reference states generate labels. Central-source forecasts remain a co
 | Dual-stream display test | Both forecasts remain visible and independently exportable |
 | Reference-label test | Forecast errors use reference values at the target time |
 | Repeatability test | A fixed scenario configuration and seed reproduce the same input replay |
-| Candidate-promotion test | A passing candidate changes the complete active pipeline version |
+| Candidate-promotion test | A passing hypernetwork and GNN candidate changes the complete active pipeline version |
+| Feedback-isolation test | Forecast errors update only the hypernetwork and GNN; tree bank and temporal forecaster weights are unchanged by the loop |
+| Tree fine-tuning test | Tree refits use only Monte Carlo scenario data and reference labels, never forecast errors, and no tree output is fed back to the hypernetwork |
 | Evaluator-access test | A fresh evaluator can complete the local demo without paid services or admin access |
 
 Report MAE/RMSE by variable and horizon, exit-state classification/calibration metrics, stale-report detection precision/recall, detection delay and evidence coverage. Numeric metrics are not comparable across units without explicit scaling. Include a fixed-expiry information baseline and a simple forecasting baseline.
@@ -270,7 +312,7 @@ Report MAE/RMSE by variable and horizon, exit-state classification/calibration m
 
 ## 12. Implementation and access status
 
-The proposed stack is documented in README.md. No application code, deployment, checkpoint, dataset, account or measured benchmark was supplied for this documentation task. Runtime instructions must be checked against the implemented repository before submission. The local evaluation design uses bundled scenarios and a disclosed central-source fixture so that evaluators do not need paid external access.
+The proposed stack is documented in README.md. No application code, deployment, checkpoint, dataset, account or measured benchmark was supplied for this documentation task. Runtime instructions must be checked against the implemented repository before submission. Implementation status: the forward path (tree bank, hypernetwork, GNN, temporal forecaster and dual-stream comparison) is implemented, and only the tree bank is fitted, once, on the bundled scenarios. The hypernetwork, GNN and temporal model run with initial weights. The two update paths in sections 3, 7 and 9, which are Monte Carlo tree fine-tuning and the hypernetwork-GNN feedback loop with gated promotion, are design targets and are not yet implemented. The local evaluation design uses bundled scenarios and a disclosed central-source fixture so that evaluators do not need paid external access.
 
 ## 13. Design references
 

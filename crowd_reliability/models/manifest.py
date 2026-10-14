@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 class PipelineManifest(BaseModel):
     pipeline_version: str = "v1.0.0"
     tree_version: str = "dt_bank_v1"
+    hypernet_version: str = "hypernet_v1"
     gnn_version: str = "gnn_edge_v1"
     temporal_version: str = "gru_forecaster_v1"
     scaler_version: str = "standard_scaler_v1"
