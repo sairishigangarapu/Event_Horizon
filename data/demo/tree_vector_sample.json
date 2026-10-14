@@ -1,0 +1,515 @@
+{
+  "scenario_id": "crowd_surge",
+  "evaluation_time": "2026-10-14T12:04:59.125477",
+  "tree_version": "dt_bank_v2",
+  "feature_schema_version": "obs_only_v1",
+  "scaler_version": "scaler_obs_only_v1",
+  "channel_metadata": [
+    {
+      "name": "estimated_density",
+      "unit": "p/m2",
+      "kind": "regression",
+      "source_variable": "density",
+      "applicability": "all_zones"
+    },
+    {
+      "name": "estimated_speed",
+      "unit": "m/s",
+      "kind": "regression",
+      "source_variable": "speed",
+      "applicability": "all_zones"
+    },
+    {
+      "name": "estimated_inflow",
+      "unit": "p/s",
+      "kind": "regression",
+      "source_variable": "inflow",
+      "applicability": "all_zones"
+    },
+    {
+      "name": "estimated_outflow",
+      "unit": "p/s",
+      "kind": "regression",
+      "source_variable": "outflow",
+      "applicability": "all_zones"
+    },
+    {
+      "name": "estimated_queue_length",
+      "unit": "persons",
+      "kind": "regression",
+      "source_variable": "queue_length",
+      "applicability": "all_zones"
+    },
+    {
+      "name": "probability_exit_open",
+      "unit": "probability",
+      "kind": "classification",
+      "source_variable": "exit_open",
+      "applicability": "exit_zones_only"
+    }
+  ],
+  "zone_ids": [
+    "concourse",
+    "corridor_1",
+    "corridor_2",
+    "ent_a",
+    "ent_b",
+    "exit_1",
+    "exit_2",
+    "stair_1"
+  ],
+  "values": [
+    [
+      1.2334,
+      1.0222,
+      6.6888,
+      1.8524,
+      0.0,
+      0.0
+    ],
+    [
+      0.174,
+      1.2952,
+      1.8708,
+      1.2836,
+      0.0,
+      0.0
+    ],
+    [
+      0.3469,
+      1.2506,
+      2.4778,
+      1.0922,
+      0.0,
+      0.0
+    ],
+    [
+      0.174,
+      1.2952,
+      2.4778,
+      1.0922,
+      0.0,
+      0.0
+    ],
+    [
+      0.4854,
+      1.2149,
+      1.8708,
+      1.0922,
+      0.0,
+      0.0
+    ],
+    [
+      0.174,
+      1.2952,
+      1.026,
+      1.9704,
+      0.0,
+      1.0
+    ],
+    [
+      0.1481,
+      1.3018,
+      1.026,
+      1.9704,
+      0.0,
+      1.0
+    ],
+    [
+      0.5528,
+      1.1975,
+      1.0586,
+      1.9704,
+      0.0,
+      0.0
+    ]
+  ],
+  "masks": [
+    [
+      1,
+      1,
+      1,
+      1,
+      1,
+      0
+    ],
+    [
+      1,
+      1,
+      1,
+      1,
+      1,
+      0
+    ],
+    [
+      1,
+      1,
+      1,
+      1,
+      1,
+      0
+    ],
+    [
+      1,
+      1,
+      1,
+      1,
+      1,
+      0
+    ],
+    [
+      1,
+      1,
+      1,
+      1,
+      1,
+      0
+    ],
+    [
+      1,
+      1,
+      1,
+      1,
+      1,
+      1
+    ],
+    [
+      1,
+      1,
+      1,
+      1,
+      1,
+      1
+    ],
+    [
+      1,
+      1,
+      1,
+      1,
+      1,
+      0
+    ]
+  ],
+  "zones": [
+    {
+      "scenario_id": "crowd_surge",
+      "zone_id": "concourse",
+      "evaluation_time": "2026-10-14T12:04:59.125477",
+      "tree_version": "dt_bank_v2",
+      "feature_schema_version": "obs_only_v1",
+      "scaler_version": "scaler_obs_only_v1",
+      "channel_names": [
+        "estimated_density",
+        "estimated_speed",
+        "estimated_inflow",
+        "estimated_outflow",
+        "estimated_queue_length",
+        "probability_exit_open"
+      ],
+      "channel_units": [
+        "p/m2",
+        "m/s",
+        "p/s",
+        "p/s",
+        "persons",
+        "probability"
+      ],
+      "channel_values": [
+        1.2334,
+        1.0222,
+        6.6888,
+        1.8524,
+        0.0,
+        0.0
+      ],
+      "channel_masks": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        0
+      ]
+    },
+    {
+      "scenario_id": "crowd_surge",
+      "zone_id": "corridor_1",
+      "evaluation_time": "2026-10-14T12:04:59.125477",
+      "tree_version": "dt_bank_v2",
+      "feature_schema_version": "obs_only_v1",
+      "scaler_version": "scaler_obs_only_v1",
+      "channel_names": [
+        "estimated_density",
+        "estimated_speed",
+        "estimated_inflow",
+        "estimated_outflow",
+        "estimated_queue_length",
+        "probability_exit_open"
+      ],
+      "channel_units": [
+        "p/m2",
+        "m/s",
+        "p/s",
+        "p/s",
+        "persons",
+        "probability"
+      ],
+      "channel_values": [
+        0.174,
+        1.2952,
+        1.8708,
+        1.2836,
+        0.0,
+        0.0
+      ],
+      "channel_masks": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        0
+      ]
+    },
+    {
+      "scenario_id": "crowd_surge",
+      "zone_id": "corridor_2",
+      "evaluation_time": "2026-10-14T12:04:59.125477",
+      "tree_version": "dt_bank_v2",
+      "feature_schema_version": "obs_only_v1",
+      "scaler_version": "scaler_obs_only_v1",
+      "channel_names": [
+        "estimated_density",
+        "estimated_speed",
+        "estimated_inflow",
+        "estimated_outflow",
+        "estimated_queue_length",
+        "probability_exit_open"
+      ],
+      "channel_units": [
+        "p/m2",
+        "m/s",
+        "p/s",
+        "p/s",
+        "persons",
+        "probability"
+      ],
+      "channel_values": [
+        0.3469,
+        1.2506,
+        2.4778,
+        1.0922,
+        0.0,
+        0.0
+      ],
+      "channel_masks": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        0
+      ]
+    },
+    {
+      "scenario_id": "crowd_surge",
+      "zone_id": "ent_a",
+      "evaluation_time": "2026-10-14T12:04:59.125477",
+      "tree_version": "dt_bank_v2",
+      "feature_schema_version": "obs_only_v1",
+      "scaler_version": "scaler_obs_only_v1",
+      "channel_names": [
+        "estimated_density",
+        "estimated_speed",
+        "estimated_inflow",
+        "estimated_outflow",
+        "estimated_queue_length",
+        "probability_exit_open"
+      ],
+      "channel_units": [
+        "p/m2",
+        "m/s",
+        "p/s",
+        "p/s",
+        "persons",
+        "probability"
+      ],
+      "channel_values": [
+        0.174,
+        1.2952,
+        2.4778,
+        1.0922,
+        0.0,
+        0.0
+      ],
+      "channel_masks": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        0
+      ]
+    },
+    {
+      "scenario_id": "crowd_surge",
+      "zone_id": "ent_b",
+      "evaluation_time": "2026-10-14T12:04:59.125477",
+      "tree_version": "dt_bank_v2",
+      "feature_schema_version": "obs_only_v1",
+      "scaler_version": "scaler_obs_only_v1",
+      "channel_names": [
+        "estimated_density",
+        "estimated_speed",
+        "estimated_inflow",
+        "estimated_outflow",
+        "estimated_queue_length",
+        "probability_exit_open"
+      ],
+      "channel_units": [
+        "p/m2",
+        "m/s",
+        "p/s",
+        "p/s",
+        "persons",
+        "probability"
+      ],
+      "channel_values": [
+        0.4854,
+        1.2149,
+        1.8708,
+        1.0922,
+        0.0,
+        0.0
+      ],
+      "channel_masks": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        0
+      ]
+    },
+    {
+      "scenario_id": "crowd_surge",
+      "zone_id": "exit_1",
+      "evaluation_time": "2026-10-14T12:04:59.125477",
+      "tree_version": "dt_bank_v2",
+      "feature_schema_version": "obs_only_v1",
+      "scaler_version": "scaler_obs_only_v1",
+      "channel_names": [
+        "estimated_density",
+        "estimated_speed",
+        "estimated_inflow",
+        "estimated_outflow",
+        "estimated_queue_length",
+        "probability_exit_open"
+      ],
+      "channel_units": [
+        "p/m2",
+        "m/s",
+        "p/s",
+        "p/s",
+        "persons",
+        "probability"
+      ],
+      "channel_values": [
+        0.174,
+        1.2952,
+        1.026,
+        1.9704,
+        0.0,
+        1.0
+      ],
+      "channel_masks": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    {
+      "scenario_id": "crowd_surge",
+      "zone_id": "exit_2",
+      "evaluation_time": "2026-10-14T12:04:59.125477",
+      "tree_version": "dt_bank_v2",
+      "feature_schema_version": "obs_only_v1",
+      "scaler_version": "scaler_obs_only_v1",
+      "channel_names": [
+        "estimated_density",
+        "estimated_speed",
+        "estimated_inflow",
+        "estimated_outflow",
+        "estimated_queue_length",
+        "probability_exit_open"
+      ],
+      "channel_units": [
+        "p/m2",
+        "m/s",
+        "p/s",
+        "p/s",
+        "persons",
+        "probability"
+      ],
+      "channel_values": [
+        0.1481,
+        1.3018,
+        1.026,
+        1.9704,
+        0.0,
+        1.0
+      ],
+      "channel_masks": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    {
+      "scenario_id": "crowd_surge",
+      "zone_id": "stair_1",
+      "evaluation_time": "2026-10-14T12:04:59.125477",
+      "tree_version": "dt_bank_v2",
+      "feature_schema_version": "obs_only_v1",
+      "scaler_version": "scaler_obs_only_v1",
+      "channel_names": [
+        "estimated_density",
+        "estimated_speed",
+        "estimated_inflow",
+        "estimated_outflow",
+        "estimated_queue_length",
+        "probability_exit_open"
+      ],
+      "channel_units": [
+        "p/m2",
+        "m/s",
+        "p/s",
+        "p/s",
+        "persons",
+        "probability"
+      ],
+      "channel_values": [
+        0.5528,
+        1.1975,
+        1.0586,
+        1.9704,
+        0.0,
+        0.0
+      ],
+      "channel_masks": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        0
+      ]
+    }
+  ]
+}

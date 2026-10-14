@@ -19,9 +19,21 @@ from crowd_reliability.simulation.scenarios import (
 from crowd_reliability.simulation.simulator import CrowdSimulator, TARGET_VARIABLES
 from crowd_reliability.simulation.generator import ObservationGenerator
 from crowd_reliability.ml.pipeline import ArchitecturePipeline
+from crowd_reliability.ml.tree_bank import TREE_CHANNELS, DecisionTreeBank
+from crowd_reliability.ml.tree_train import (
+    benchmark_channels,
+    monte_carlo_refit,
+    predict_scenario_vectors,
+    save_training_artifacts,
+    split_scenarios,
+    train_tree_bank,
+)
+from crowd_reliability.ml.trees import TreeSnapshot, TreeVectorResult, infer_tree_vector
 from crowd_reliability.services.central_source import CentralSourceAdapter
 from crowd_reliability.services.comparator import ForecastComparator
 from crowd_reliability.services.evaluator import EvaluationService
+
+DEFAULT_TREE_ARTIFACT_DIR = "./models/trees"
 
 def cmd_db_init():
     """Initializes SQLite database and populates venue layout."""
@@ -364,6 +376,167 @@ def cmd_spatial_init(dry_run: bool = False, seed: int = 0):
         raise
     print(f"[spatial-init] Active spatial pair: {rel_dir} (untrained initial weights).")
 
+def _print_channel_metrics(metrics: Dict[str, Dict[str, Any]]):
+    print(f"\n{'Channel':<26} | {'MAE':<10} | {'RMSE':<10} | {'Acc':<8} | {'Brier':<8} | {'N':<6}")
+    print("-" * 82)
+    for channel in TREE_CHANNELS:
+        m = metrics.get(channel, {})
+        mae = f"{m['mae']:.4f}" if m.get("mae") is not None else "-"
+        rmse = f"{m['rmse']:.4f}" if m.get("rmse") is not None else "-"
+        acc = f"{m['accuracy']:.4f}" if m.get("accuracy") is not None else "-"
+        brier = f"{m['brier_score']:.4f}" if m.get("brier_score") is not None else "-"
+        print(f"{channel:<26} | {mae:<10} | {rmse:<10} | {acc:<8} | {brier:<8} | {m.get('count', 0):<6}")
+
+
+def _load_jsonl(path: str) -> List[Dict[str, Any]]:
+    import json
+    rows = []
+    with open(path) as f:
+        for line in f:
+            line = line.strip()
+            if line:
+                rows.append(json.loads(line))
+    return rows
+
+
+def cmd_train_trees(train: str = None, test: str = None, seed: int = 42,
+                    out_dir: str = DEFAULT_TREE_ARTIFACT_DIR, max_samples: int = None):
+    """Fits the versioned scaler + decision-tree bank on training scenarios only.
+
+    Labels come from reference current state (reference_states) — never forecasts.
+    """
+    print(f"[train-trees] Training tree bank (seed={seed}) -> {out_dir}")
+    venue = get_default_venue()
+    zone_exit_flags = {z["zone_id"]: bool(z.get("has_exit", False)) for z in venue.zones}
+
+    db = SessionLocal()
+    try:
+        all_obs = db.query(ObservationRecord).all()
+        all_refs = db.query(ReferenceStateRecord).all()
+    finally:
+        db.close()
+
+    if not all_refs:
+        print("[train-trees] No reference states found. Run 'seed-demo' first.")
+        return
+
+    available = sorted({r.scenario_id for r in all_refs})
+    if train and test:
+        train_ids = [s.strip() for s in train.split(",") if s.strip()]
+        test_ids = [s.strip() for s in test.split(",") if s.strip()]
+    else:
+        train_ids, test_ids = split_scenarios(available)
+    print(f"[train-trees] Train scenarios: {train_ids} | Held-out: {test_ids}")
+
+    train_obs = [o for o in all_obs if o.scenario_id in train_ids]
+    train_refs = [r for r in all_refs if r.scenario_id in train_ids]
+    test_obs = [o for o in all_obs if o.scenario_id in test_ids]
+    test_refs = [r for r in all_refs if r.scenario_id in test_ids]
+
+    train_cutoff = max(r.label_available_at for r in train_refs)
+    bank, scaler, meta = train_tree_bank(
+        train_obs, train_refs, zone_exit_flags,
+        seed=seed, training_cutoff=train_cutoff, max_samples=max_samples,
+    )
+    meta["train_scenario_ids"] = train_ids
+    meta["test_scenario_ids"] = test_ids
+    paths = save_training_artifacts(bank, scaler, meta, out_dir)
+    print(f"[train-trees] Saved: {paths['tree_bank']}, {paths['scaler']}, {paths['metadata']}")
+
+    # Out-of-sample benchmark on the held-out scenario
+    if test_refs:
+        eval_times = sorted({r.state_at for r in test_refs})[::3]
+        rows = predict_scenario_vectors(
+            bank, test_obs, zone_exit_flags, test_ids[0], eval_times,
+            zone_ids=sorted(zone_exit_flags.keys()),
+        )
+        metrics = benchmark_channels(rows, test_refs)
+        print(f"\n=== Held-out benchmark ({test_ids[0]}) ===")
+        _print_channel_metrics(metrics)
+        import json
+        with open(os.path.join(out_dir, "holdout_benchmark.json"), "w") as f:
+            json.dump(metrics, f, indent=2)
+
+
+def cmd_export_tree_vector(scenario: str = "crowd_surge", as_of: str = None,
+                           out: str = "./data/demo/tree_vector_sample.json"):
+    """Exports one D[z,t] sample vector (all six channels) for Persons 3 and 4."""
+    venue = get_default_venue()
+    zone_exit_flags = {z["zone_id"]: bool(z.get("has_exit", False)) for z in venue.zones}
+    zone_ids = sorted(zone_exit_flags.keys())
+
+    bank = DecisionTreeBank()
+    versioned_path = os.path.join(DEFAULT_TREE_ARTIFACT_DIR, f"tree_bank_{bank.version}.joblib")
+    prod_path = os.path.join(settings.model_dir, "tree_bank.joblib")
+    if os.path.exists(versioned_path):
+        bank.load(versioned_path)
+        print(f"[export-tree-vector] Loaded {versioned_path} (version={bank.version})")
+    elif os.path.exists(prod_path):
+        bank.load(prod_path)
+        print(f"[export-tree-vector] Loaded {prod_path} (version={bank.version})")
+    else:
+        print("[export-tree-vector] WARNING: no fitted tree bank found; using heuristic fallback.")
+
+    db = SessionLocal()
+    try:
+        observations = db.query(ObservationRecord).filter(
+            ObservationRecord.scenario_id == scenario
+        ).all()
+    finally:
+        db.close()
+    if not observations:
+        print(f"[export-tree-vector] No observations for scenario '{scenario}'. Run 'seed-demo' first.")
+        return
+
+    eval_time = datetime.fromisoformat(as_of) if as_of else max(o.received_at for o in observations)
+    snapshot = TreeSnapshot(
+        scenario_id=scenario,
+        as_of_time=eval_time,
+        observations=observations,
+        zone_ids=zone_ids,
+        zone_exit_flags=zone_exit_flags,
+    )
+    result = infer_tree_vector(snapshot, bank)
+
+    os.makedirs(os.path.dirname(out) or ".", exist_ok=True)
+    with open(out, "w") as f:
+        f.write(result.to_json())
+    print(f"[export-tree-vector] Wrote {len(result.zone_ids)} zones x {len(TREE_CHANNELS)} channels to {out}")
+
+
+def cmd_monte_carlo_refit(runs: int = 5, seed: int = 42,
+                          out_dir: str = os.path.join(DEFAULT_TREE_ARTIFACT_DIR, "mc"),
+                          max_eval_times: int = None):
+    """Seeded Monte Carlo refitting from observations + reference labels only."""
+    print(f"[mc-refit] {runs} runs, base seed={seed} -> {out_dir}")
+    summary = monte_carlo_refit(
+        n_runs=runs, seed=seed, out_dir=out_dir, max_eval_times=max_eval_times,
+    )
+    print(f"[mc-refit] Holdout scenario: {summary['holdout_scenario']}")
+    for r in summary["runs"]:
+        print(f"  run {r['run']:03d} (seed={r['seed']}): {r['n_train_samples']} train samples, {r['n_oos_rows']} OOS rows")
+
+    preds = _load_jsonl(summary["oos_predictions"])
+    refs = _load_jsonl(summary["mc_references"])
+    metrics = benchmark_channels(preds, refs)
+    print("\n=== Monte Carlo OOS benchmark (held-out scenario) ===")
+    _print_channel_metrics(metrics)
+    import json
+    with open(os.path.join(out_dir, "mc_benchmarks.json"), "w") as f:
+        json.dump(metrics, f, indent=2)
+
+
+def cmd_benchmark_trees(preds: str = os.path.join(DEFAULT_TREE_ARTIFACT_DIR, "mc", "oos_predictions.jsonl"),
+                        refs: str = os.path.join(DEFAULT_TREE_ARTIFACT_DIR, "mc", "mc_references.jsonl")):
+    """Recomputes per-channel benchmark metrics from stored MC predictions."""
+    if not os.path.exists(preds) or not os.path.exists(refs):
+        print(f"[benchmark-trees] Missing files. Run 'mc-refit' first (expects {preds}, {refs}).")
+        return
+    metrics = benchmark_channels(_load_jsonl(preds), _load_jsonl(refs))
+    print("\n=== Per-channel benchmark vs reference current state ===")
+    _print_channel_metrics(metrics)
+
+
 def main():
     parser = argparse.ArgumentParser(description="Crowd Reliability CLI")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -388,6 +561,31 @@ def main():
     p_sp = subparsers.add_parser("spatial-init", help="Create an untrained hypernetwork+GNN pair and switch the manifest to it")
     p_sp.add_argument("--dry-run", action="store_true", help="Print the planned change without writing")
     p_sp.add_argument("--seed", type=int, default=0, help="Weight initialization seed")
+    # train-trees
+    p_tt = subparsers.add_parser("train-trees", help="Fit versioned scaler + tree bank (labels: reference state only)")
+    p_tt.add_argument("--train", type=str, default=None, help="Comma-separated training scenario ids")
+    p_tt.add_argument("--test", type=str, default=None, help="Comma-separated held-out scenario ids")
+    p_tt.add_argument("--seed", type=int, default=42, help="Random seed")
+    p_tt.add_argument("--out", type=str, default=DEFAULT_TREE_ARTIFACT_DIR, help="Artifact output dir")
+    p_tt.add_argument("--max-samples", type=int, default=None, help="Cap training samples")
+
+    # export-tree-vector
+    p_ev = subparsers.add_parser("export-tree-vector", help="Export sample D[z,t] vector JSON (Persons 3 & 4)")
+    p_ev.add_argument("--scenario", type=str, default="crowd_surge", help="Scenario identifier")
+    p_ev.add_argument("--as-of", type=str, default=None, help="ISO evaluation time (default: latest observation)")
+    p_ev.add_argument("--out", type=str, default="./data/demo/tree_vector_sample.json", help="Output JSON path")
+
+    # mc-refit
+    p_mc = subparsers.add_parser("mc-refit", help="Seeded Monte Carlo tree refitting + OOS predictions")
+    p_mc.add_argument("--runs", type=int, default=5, help="Number of Monte Carlo runs")
+    p_mc.add_argument("--seed", type=int, default=42, help="Base random seed")
+    p_mc.add_argument("--out", type=str, default=os.path.join(DEFAULT_TREE_ARTIFACT_DIR, "mc"), help="Output dir")
+    p_mc.add_argument("--max-eval-times", type=int, default=None, help="Cap OOS evaluation times per run")
+
+    # benchmark-trees
+    p_bt = subparsers.add_parser("benchmark-trees", help="Per-channel benchmark of stored MC predictions")
+    p_bt.add_argument("--preds", type=str, default=os.path.join(DEFAULT_TREE_ARTIFACT_DIR, "mc", "oos_predictions.jsonl"))
+    p_bt.add_argument("--refs", type=str, default=os.path.join(DEFAULT_TREE_ARTIFACT_DIR, "mc", "mc_references.jsonl"))
 
     args = parser.parse_args()
 
@@ -401,6 +599,16 @@ def main():
         cmd_evaluate(split=args.split)
     elif args.command == "spatial-init":
         cmd_spatial_init(dry_run=args.dry_run, seed=args.seed)
+    elif args.command == "train-trees":
+        cmd_train_trees(train=args.train, test=args.test, seed=args.seed,
+                        out_dir=args.out, max_samples=args.max_samples)
+    elif args.command == "export-tree-vector":
+        cmd_export_tree_vector(scenario=args.scenario, as_of=args.as_of, out=args.out)
+    elif args.command == "mc-refit":
+        cmd_monte_carlo_refit(runs=args.runs, seed=args.seed, out_dir=args.out,
+                              max_eval_times=args.max_eval_times)
+    elif args.command == "benchmark-trees":
+        cmd_benchmark_trees(preds=args.preds, refs=args.refs)
 
 if __name__ == "__main__":
     main()

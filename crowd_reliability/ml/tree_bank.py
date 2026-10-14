@@ -13,29 +13,56 @@ TREE_CHANNELS = [
     "probability_exit_open",
 ]
 
+# Fixed per-channel metadata. Channel order in TREE_CHANNELS is the export order.
+CHANNEL_METADATA: List[Dict[str, Any]] = [
+    {"name": "estimated_density", "unit": "p/m2", "kind": "regression",
+     "source_variable": "density", "applicability": "all_zones"},
+    {"name": "estimated_speed", "unit": "m/s", "kind": "regression",
+     "source_variable": "speed", "applicability": "all_zones"},
+    {"name": "estimated_inflow", "unit": "p/s", "kind": "regression",
+     "source_variable": "inflow", "applicability": "all_zones"},
+    {"name": "estimated_outflow", "unit": "p/s", "kind": "regression",
+     "source_variable": "outflow", "applicability": "all_zones"},
+    {"name": "estimated_queue_length", "unit": "persons", "kind": "regression",
+     "source_variable": "queue_length", "applicability": "all_zones"},
+    {"name": "probability_exit_open", "unit": "probability", "kind": "classification",
+     "source_variable": "exit_open", "applicability": "exit_zones_only"},
+]
+
 class DecisionTreeBank:
     """
     Bank of independent decision trees estimating current-state variables from observed context.
     NEVER collapses or sums channels into a single trust signal.
+    Labels must come from simulator reference current state at time t — never forecasts.
     """
-    def __init__(self, max_depth: int = 6):
+    def __init__(self, max_depth: int = 6, random_state: int = 42):
         self.max_depth = max_depth
-        self.version = "dt_bank_v1"
+        self.random_state = random_state
+        self.version = "dt_bank_v2"
+        self.scaler: Any = None  # Optional fitted FeatureScaler applied before fit/predict
         self.trees: Dict[str, Any] = {
-            "estimated_density": DecisionTreeRegressor(max_depth=max_depth, random_state=42),
-            "estimated_speed": DecisionTreeRegressor(max_depth=max_depth, random_state=42),
-            "estimated_inflow": DecisionTreeRegressor(max_depth=max_depth, random_state=42),
-            "estimated_outflow": DecisionTreeRegressor(max_depth=max_depth, random_state=42),
-            "estimated_queue_length": DecisionTreeRegressor(max_depth=max_depth, random_state=42),
-            "probability_exit_open": DecisionTreeClassifier(max_depth=max_depth, random_state=42),
+            "estimated_density": DecisionTreeRegressor(max_depth=max_depth, random_state=random_state),
+            "estimated_speed": DecisionTreeRegressor(max_depth=max_depth, random_state=random_state),
+            "estimated_inflow": DecisionTreeRegressor(max_depth=max_depth, random_state=random_state),
+            "estimated_outflow": DecisionTreeRegressor(max_depth=max_depth, random_state=random_state),
+            "estimated_queue_length": DecisionTreeRegressor(max_depth=max_depth, random_state=random_state),
+            "probability_exit_open": DecisionTreeClassifier(max_depth=max_depth, random_state=random_state),
         }
         self.is_fitted = False
 
-    def fit(self, features: np.ndarray, targets: Dict[str, np.ndarray]):
+    def channel_metadata(self) -> List[Dict[str, Any]]:
+        return [dict(m) for m in CHANNEL_METADATA]
+
+    def fit(self, features: np.ndarray, targets: Dict[str, np.ndarray], scaler: Any = None):
         """
         Fits each channel's tree on the training data.
         targets dict keys match TREE_CHANNELS.
+        If a fitted FeatureScaler is provided, features are transformed with it and the
+        scaler is stored so predict_zone applies the identical transform at inference.
         """
+        self.scaler = scaler
+        if self.scaler is not None:
+            features = self.scaler.transform(features)
         for channel in TREE_CHANNELS:
             y = targets[channel]
             if channel == "probability_exit_open":
@@ -58,6 +85,8 @@ class DecisionTreeBank:
             channel_masks: [1, 1, 1, 1, 1, 1 if has_exit else 0]
         """
         x = feature_row.reshape(1, -1)
+        if self.scaler is not None and self.is_fitted:
+            x = self.scaler.transform(x)
         values = []
         masks = []
 
@@ -93,11 +122,21 @@ class DecisionTreeBank:
         return values, masks
 
     def save(self, filepath: str):
-        os.makedirs(os.path.dirname(filepath), exist_ok=True)
-        joblib.dump({"trees": self.trees, "is_fitted": self.is_fitted, "version": self.version}, filepath)
+        os.makedirs(os.path.dirname(filepath) or ".", exist_ok=True)
+        joblib.dump({
+            "trees": self.trees,
+            "is_fitted": self.is_fitted,
+            "version": self.version,
+            "scaler": self.scaler,
+            "max_depth": self.max_depth,
+            "random_state": self.random_state,
+        }, filepath)
 
     def load(self, filepath: str):
         data = joblib.load(filepath)
         self.trees = data["trees"]
         self.is_fitted = data["is_fitted"]
         self.version = data.get("version", self.version)
+        self.scaler = data.get("scaler")
+        self.max_depth = data.get("max_depth", self.max_depth)
+        self.random_state = data.get("random_state", self.random_state)

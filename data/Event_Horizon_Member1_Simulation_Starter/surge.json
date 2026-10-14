@@ -1,0 +1,10 @@
+{
+  "scenario_id":"surge", "display_name":"Sudden arrival surge",
+  "seed":1205, "step_seconds":5, "duration_seconds":1200,
+  "start_time_utc":"2026-10-14T10:00:00+00:00", "configuration_version":"sim-v0.1",
+  "arrival_rate_persons_per_second":1.15,
+  "arrival_events":[{"from_second":230,"until_second":610,"rate_persons_per_second":8.5}],
+  "exit_restrictions":[], "route_detour_fraction":0.24,
+  "observation_every_seconds":15, "observation_base_delay_seconds":7,
+  "observation_dropout_probability":0.10, "observation_outages":[]
+}

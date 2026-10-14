@@ -1,0 +1,32 @@
+{
+  "n_runs": 3,
+  "seed": 42,
+  "base_scenario_ids": [
+    "bottleneck_exit_closure",
+    "crowd_surge",
+    "normal_evacuation"
+  ],
+  "holdout_scenario": "normal_evacuation",
+  "oos_predictions": "./models/trees/mc/oos_predictions.jsonl",
+  "mc_references": "./models/trees/mc/mc_references.jsonl",
+  "runs": [
+    {
+      "run": 0,
+      "seed": 42,
+      "n_train_samples": 960,
+      "n_oos_rows": 288
+    },
+    {
+      "run": 1,
+      "seed": 43,
+      "n_train_samples": 960,
+      "n_oos_rows": 288
+    },
+    {
+      "run": 2,
+      "seed": 44,
+      "n_train_samples": 960,
+      "n_oos_rows": 288
+    }
+  ]
+}
