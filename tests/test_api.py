@@ -65,3 +65,42 @@ def test_api_assessments_invalid_timestamp():
     assert resp.status_code == 422
     assert "detail" in resp.json()
 
+
+def test_api_health():
+    resp = client.get("/health")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "ok"
+    assert data["model_loaded"] is True
+    assert data["tree_version"] == "dt_bank_v2"  # scaler-aware retraining now ships production v2
+
+
+def test_api_tree_outputs_route():
+    # P2 Section-G route: deterministic six-channel D[z,t] at as_of (or latest).
+    resp = client.get("/api/scenarios/crowd_surge/tree-outputs")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["tree_version"] == "dt_bank_v2"
+    assert data["scaler_version"] == "scaler_obs_only_v1"
+    assert len(data["channel_metadata"]) == 6
+    assert [c["name"] for c in data["channel_metadata"]] == [
+        "estimated_density", "estimated_speed", "estimated_inflow",
+        "estimated_outflow", "estimated_queue_length", "probability_exit_open",
+    ]
+    zones = data["zones"]
+    # If seeded data is present, every zone carries all six channels + masks.
+    if zones:
+        z = zones[0]
+        assert len(z["channel_values"]) == 6
+        assert len(z["channel_masks"]) == 6
+        # Exit channel applicability: 0 outside exits, 1 inside exits.
+        exit_masks = [z2["channel_masks"][5] for z2 in zones]
+        assert set(exit_masks) <= {0, 1}
+        assert 1 in exit_masks  # the venue has at least two exits
+
+
+def test_api_tree_outputs_invalid_as_of():
+    resp = client.get("/api/scenarios/crowd_surge/tree-outputs?as_of=not-a-date")
+    assert resp.status_code == 422
+    assert "detail" in resp.json()
+

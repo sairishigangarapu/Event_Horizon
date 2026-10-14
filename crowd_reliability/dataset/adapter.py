@@ -144,7 +144,7 @@ def ingest_dataset(
         ))
     for z in zones:
         eid = f"grid_{z['zone_id']}"
-        if not db_session.query(ConnectionRecord).get(eid):
+        if db_session.get(ConnectionRecord, eid) is None:
             db_session.add(ConnectionRecord(
                 edge_id=eid, from_zone=z["zone_id"], to_zone=z["zone_id"],
                 width_m=1.0, direction="bidirectional", map_version="grid_v1",

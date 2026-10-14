@@ -1,26 +1,25 @@
 {
-  "pipeline_version": "v1.1.0",
-  "tree_version": "dt_bank_v1",
+  "pipeline_version": "v1.0.0",
+  "tree_version": "dt_bank_v2",
   "hypernet_version": "hypernet_v2",
   "gnn_version": "gnn_edge_v2",
   "temporal_version": "gru_forecaster_v1",
-  "scaler_version": "standard_scaler_v1",
+  "scaler_version": "scaler_obs_only_v1",
   "schema_version": "v1.0",
-  "training_cutoff": "2026-10-14T10:48:44.490176+00:00",
+  "training_cutoff": "2026-10-14T19:26:38.788578+00:00",
   "scenario_split": "production",
   "is_active": true,
   "model_hashes": {
-    "tree_bank.joblib": "b1045036b00ecf75e07d16146b58907ba603ef4f9346b45eafe6cc377cf59155",
-    "temporal_model.pt": "a5cd117649bd20590fcca5db19395bfe93fc486ebfce1b137c8cffbc0b4bf841",
-    "spatial/hypernet_v2__gnn_edge_v2__6675c91e/hypernet.pt": "147385d22078cedee4188cff90cda4e24dd56a9d49b3cc3f34234f4c3e9b6981",
-    "spatial/hypernet_v2__gnn_edge_v2__6675c91e/gnn.pt": "629e17ac2ee653a2b841b0da0c8830b00fa8d84543dc98aa5f70319baf65d714"
+    "tree_bank.joblib": "b4fafdbf4f68010ce92f39334247701780dc15c5e4fb582aceb2ec9ce0a6befc",
+    "temporal_model.pt": "c324131e9d3da21365711948611c32a492d292b37dee7b0a2e01b565ad5c5c6e",
+    "spatial/hypernet_v2__gnn_edge_v2__d1018ba3/hypernet.pt": "58a871d593ab376f7b6414c802c7dd83aebfe4d7c7c864e6da7fd3c12ab9ac8d",
+    "spatial/hypernet_v2__gnn_edge_v2__d1018ba3/gnn.pt": "9d906ee547e3f29892f417a76b76016306ec070fe11175a553a4c3509f0bd663"
   },
   "metrics_summary": null,
   "training_status": {
     "hypernet": "untrained_initial",
     "gnn": "untrained_initial",
-    "temporal": "untrained_initial",
-    "tree_bank": "fitted_unvalidated"
+    "temporal": "untrained_initial"
   },
-  "spatial_artifact_dir": "spatial/hypernet_v2__gnn_edge_v2__6675c91e"
+  "spatial_artifact_dir": "spatial/hypernet_v2__gnn_edge_v2__d1018ba3"
 }

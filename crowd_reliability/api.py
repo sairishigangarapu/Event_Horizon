@@ -20,6 +20,8 @@ from crowd_reliability.simulation.scenarios import (
 from crowd_reliability.simulation.simulator import CrowdSimulator
 from crowd_reliability.simulation.generator import ObservationGenerator
 from crowd_reliability.ml.pipeline import ArchitecturePipeline
+from crowd_reliability.ml.tree_bank import DecisionTreeBank
+from crowd_reliability.ml.trees import TreeSnapshot, infer_tree_vector
 from crowd_reliability.services.central_source import CentralSourceAdapter
 from crowd_reliability.services.comparator import ForecastComparator
 from crowd_reliability.services.evaluator import EvaluationService
@@ -238,3 +240,84 @@ def get_metrics(
 
     res = evaluator.score_predictions(forecasts, reference_states)
     return {"scenario_id": scenario_id, "metrics": res}
+
+# --- Shared interface freeze (PDF Section G) additions -----------------------
+
+_TREE_BANK_CACHE: Dict[str, Any] = {}
+
+
+def _load_tree_bank() -> DecisionTreeBank:
+    """Lazily load the canonical fitted bank: trained v2 artifact preferred, production as fallback."""
+    if "bank" in _TREE_BANK_CACHE:
+        return _TREE_BANK_CACHE["bank"]
+    bank = DecisionTreeBank()
+    versioned_path = os.path.join("models", "trees", f"tree_bank_{bank.version}.joblib")
+    prod_path = os.path.join(settings.model_dir, "tree_bank.joblib")
+    if os.path.exists(versioned_path):
+        bank.load(versioned_path)
+    elif os.path.exists(prod_path):
+        bank.load(prod_path)
+    _TREE_BANK_CACHE["bank"] = bank
+    return bank
+
+
+@app.get("/health")
+def health():
+    bank = _load_tree_bank()
+    return {"status": "ok", "model_loaded": bool(bank.is_fitted),
+            "tree_version": bank.version if bank.is_fitted else None}
+
+
+@app.get("/api/scenarios/{scenario_id}/tree-outputs")
+def get_tree_outputs(
+    scenario_id: str,
+    as_of: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    """P2 route (Section G op 6): the named six-channel D[z,t] vector at as_of.
+
+    Deterministic: zones sorted, channels in TREE_CHANNELS order, exit
+    applicability mask 0 outside exits. All six values preserved.
+    """
+    observations = db.query(ObservationRecord).filter(
+        ObservationRecord.scenario_id == scenario_id
+    ).all()
+
+    if as_of:
+        try:
+            eval_time = datetime.fromisoformat(as_of)
+        except (ValueError, TypeError) as exc:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Invalid ISO 8601 as_of timestamp: '{as_of}'"
+            ) from exc
+    elif observations:
+        eval_time = max(o.received_at for o in observations)
+    else:
+        return {"scenario_id": scenario_id, "zones": []}
+
+    zones = db.query(ZoneRecord).all()
+    if zones:
+        zone_exit_flags = {z.zone_id: z.zone_type == "exit" for z in zones}
+    else:
+        zone_exit_flags = {z["zone_id"]: bool(z.get("has_exit", False)) for z in get_default_venue().zones}
+    zone_ids = sorted(zone_exit_flags.keys())
+
+    bank = _load_tree_bank()
+    snapshot = TreeSnapshot(
+        scenario_id=scenario_id,
+        as_of_time=eval_time,
+        observations=observations,
+        zone_ids=zone_ids,
+        zone_exit_flags=zone_exit_flags,
+    )
+    result = infer_tree_vector(snapshot, bank)
+    return {
+        "scenario_id": scenario_id,
+        "evaluation_time": result.evaluation_time.isoformat(),
+        "tree_version": result.tree_version,
+        "feature_schema_version": result.feature_schema_version,
+        "scaler_version": result.scaler_version,
+        "channel_metadata": result.channel_metadata,
+        "zones": result.to_zone_records(),
+    }

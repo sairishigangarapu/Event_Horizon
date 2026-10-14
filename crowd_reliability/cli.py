@@ -123,42 +123,20 @@ def cmd_seed_demo(seed: int = 42):
         db.commit()
         print(f"[seed-demo] Saved {len(cent_forecasts)} central forecasts to {settings.central_forecast_path}")
 
-        # 3. Train DecisionTreeBank on observation snapshot features -> reference targets
-        print("[seed-demo] Training decision-tree bank and initializing neural pipeline...")
+        # 3. Train DecisionTreeBank via the scaler-aware path (same contract as
+        #    train-trees): versioned scaler_obs_only_v1 embedded in dt_bank_v2,
+        #    scenario-scoped observed-only features, reference-state labels.
+        print("[seed-demo] Training decision-tree bank (scaler-aware) and initializing neural pipeline...")
         pipeline = ArchitecturePipeline(venue=venue, horizons_sec=[30, 60, 120])
-
-        # Prepare simple training data for tree bank
-        # Match observations to reference states
-        X_train = []
-        Y_train = {
-            "estimated_density": [],
-            "estimated_speed": [],
-            "estimated_inflow": [],
-            "estimated_outflow": [],
-            "estimated_queue_length": [],
-            "probability_exit_open": []
-        }
-
-        # Build feature snapshots
-        ref_lookup = {(r.scenario_id, r.zone_id, r.variable, r.state_at.isoformat()): r.value for r in all_ref_records}
-        unique_samples = set((r.scenario_id, r.zone_id, r.state_at) for r in all_ref_records)
-
-        for sc_id, z_id, t_state in list(unique_samples)[:2000]:  # limit training set size for rapid seed
-            t_iso = t_state.isoformat()
-            z_data = next(z for z in venue.zones if z["zone_id"] == z_id)
-            raw_vals, norm_ages, obs_masks = pipeline.extract_zone_features(z_id, t_state, all_obs_records)
-            dt_feat = list(raw_vals) + list(norm_ages) + list(obs_masks)
-
-            X_train.append(dt_feat)
-            Y_train["estimated_density"].append(ref_lookup.get((sc_id, z_id, "density", t_iso), raw_vals[0]))
-            Y_train["estimated_speed"].append(ref_lookup.get((sc_id, z_id, "speed", t_iso), raw_vals[1]))
-            Y_train["estimated_inflow"].append(ref_lookup.get((sc_id, z_id, "inflow", t_iso), raw_vals[2]))
-            Y_train["estimated_outflow"].append(ref_lookup.get((sc_id, z_id, "outflow", t_iso), raw_vals[3]))
-            Y_train["estimated_queue_length"].append(ref_lookup.get((sc_id, z_id, "queue_length", t_iso), raw_vals[4]))
-            Y_train["probability_exit_open"].append(ref_lookup.get((sc_id, z_id, "exit_open", t_iso), 1.0 if z_data.get("has_exit") else -1.0))
-
-        import numpy as np
-        pipeline.tree_bank.fit(np.array(X_train), {k: np.array(v) for k, v in Y_train.items()})
+        zone_exit_flags = {z["zone_id"]: bool(z.get("has_exit", False)) for z in venue.zones}
+        train_cutoff = max(r.label_available_at for r in all_ref_records)
+        bank, scaler, tree_meta = train_tree_bank(
+            all_obs_records, all_ref_records, zone_exit_flags,
+            seed=seed, training_cutoff=train_cutoff, max_samples=2000,
+        )
+        pipeline.tree_bank = bank
+        pipeline.manifest.tree_version = bank.version
+        pipeline.manifest.scaler_version = scaler.version
 
         # Save production pipeline artifacts
         pipeline.save_pipeline(settings.model_dir)
