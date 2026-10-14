@@ -1,0 +1,12 @@
+{
+  "pipeline_version": "v1.0.0",
+  "tree_version": "dt_bank_v1",
+  "gnn_version": "gnn_edge_v1",
+  "temporal_version": "gru_forecaster_v1",
+  "scaler_version": "standard_scaler_v1",
+  "schema_version": "v1.0",
+  "training_cutoff": "2026-10-14T09:44:48.218969+00:00",
+  "scenario_split": "production",
+  "is_active": true,
+  "metrics_summary": null
+}
