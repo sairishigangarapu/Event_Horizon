@@ -1,0 +1,32 @@
+{
+  "fixture_label": "synthetic_fixture_only_NOT_VALIDATED",
+  "model_version": "gru_forecaster_v1_mock",
+  "u_dim": 39,
+  "history_steps": 60,
+  "horizons_sec": [
+    30,
+    60,
+    120
+  ],
+  "num_zones": 6,
+  "zone_ids": [
+    "zone_00",
+    "zone_01",
+    "zone_02",
+    "zone_03",
+    "zone_04",
+    "zone_05"
+  ],
+  "var_names": [
+    "density",
+    "speed",
+    "inflow",
+    "outflow",
+    "queue_length",
+    "exit_open"
+  ],
+  "train_epochs": 2,
+  "final_epoch_loss": 2.4985319050875576,
+  "trained_at": "2026-10-14T14:05:44.488058+00:00",
+  "WARNING": "SYNTHETIC ONLY \u2014 NOT FOR REAL DECISIONS"
+}

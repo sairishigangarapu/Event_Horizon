@@ -1,0 +1,313 @@
+{
+  "WARNING": "SYNTHETIC FIXTURE ONLY \u2014 NOT VALIDATED. Do NOT use for real emergency decisions.",
+  "scenario_id": "sc_test_01",
+  "evaluation_time": "2026-10-14T14:05:57.133672+00:00",
+  "summary_per_variable": {
+    "density": {
+      "n_pairs": 1602,
+      "mean_signed_diff": 0.45508,
+      "std_signed_diff": 0.3782,
+      "mean_abs_diff": 0.51093,
+      "std_abs_diff": 0.29848
+    },
+    "speed": {
+      "n_pairs": 1602,
+      "mean_signed_diff": 0.22145,
+      "std_signed_diff": 0.15376,
+      "mean_abs_diff": 0.23214,
+      "std_abs_diff": 0.13708
+    },
+    "inflow": {
+      "status": "unavailable"
+    },
+    "outflow": {
+      "status": "unavailable"
+    },
+    "queue_length": {
+      "n_pairs": 1602,
+      "mean_signed_diff": 2.8039,
+      "std_signed_diff": 2.0285,
+      "mean_abs_diff": 2.98035,
+      "std_abs_diff": 1.75903
+    },
+    "exit_open": {
+      "n_pairs": 534,
+      "mean_signed_diff": -0.22738,
+      "std_signed_diff": 0.133,
+      "mean_abs_diff": 0.23573,
+      "std_abs_diff": 0.11757
+    },
+    "_unit_skipped_count": 0,
+    "_unavailable_pairs": [
+      "zone_00::inflow",
+      "zone_00::outflow",
+      "zone_01::inflow",
+      "zone_01::outflow",
+      "zone_02::inflow",
+      "zone_02::outflow",
+      "zone_03::inflow",
+      "zone_03::outflow",
+      "zone_04::inflow",
+      "zone_04::outflow",
+      "zone_05::inflow",
+      "zone_05::outflow"
+    ]
+  },
+  "paired_sample": [
+    {
+      "scenario_id": "sc_test_01",
+      "zone_id": "zone_00",
+      "variable": "density",
+      "unit": "p/m2",
+      "target_at": "2026-10-01T12:00:30+00:00",
+      "horizon_sec": 30,
+      "stream_b_value": 1.33962,
+      "stream_a_value": 0.71747,
+      "signed_diff": 0.62215,
+      "absolute_diff": 0.62215
+    },
+    {
+      "scenario_id": "sc_test_01",
+      "zone_id": "zone_00",
+      "variable": "speed",
+      "unit": "m/s",
+      "target_at": "2026-10-01T12:00:30+00:00",
+      "horizon_sec": 30,
+      "stream_b_value": 1.46478,
+      "stream_a_value": 1.25687,
+      "signed_diff": 0.20791,
+      "absolute_diff": 0.20791
+    },
+    {
+      "scenario_id": "sc_test_01",
+      "zone_id": "zone_00",
+      "variable": "queue_length",
+      "unit": "persons",
+      "target_at": "2026-10-01T12:00:30+00:00",
+      "horizon_sec": 30,
+      "stream_b_value": 2.32195,
+      "stream_a_value": 0.04904,
+      "signed_diff": 2.27291,
+      "absolute_diff": 2.27291
+    },
+    {
+      "scenario_id": "sc_test_01",
+      "zone_id": "zone_00",
+      "variable": "density",
+      "unit": "p/m2",
+      "target_at": "2026-10-01T12:01:00+00:00",
+      "horizon_sec": 60,
+      "stream_b_value": 1.97495,
+      "stream_a_value": 0.75238,
+      "signed_diff": 1.22257,
+      "absolute_diff": 1.22257
+    },
+    {
+      "scenario_id": "sc_test_01",
+      "zone_id": "zone_00",
+      "variable": "speed",
+      "unit": "m/s",
+      "target_at": "2026-10-01T12:01:00+00:00",
+      "horizon_sec": 60,
+      "stream_b_value": 1.43795,
+      "stream_a_value": 1.3079,
+      "signed_diff": 0.13005,
+      "absolute_diff": 0.13005
+    },
+    {
+      "scenario_id": "sc_test_01",
+      "zone_id": "zone_00",
+      "variable": "queue_length",
+      "unit": "persons",
+      "target_at": "2026-10-01T12:01:00+00:00",
+      "horizon_sec": 60,
+      "stream_b_value": 6.00873,
+      "stream_a_value": 0.50399,
+      "signed_diff": 5.50474,
+      "absolute_diff": 5.50474
+    },
+    {
+      "scenario_id": "sc_test_01",
+      "zone_id": "zone_00",
+      "variable": "density",
+      "unit": "p/m2",
+      "target_at": "2026-10-01T12:02:00+00:00",
+      "horizon_sec": 120,
+      "stream_b_value": 2.02287,
+      "stream_a_value": 1.28598,
+      "signed_diff": 0.73689,
+      "absolute_diff": 0.73689
+    },
+    {
+      "scenario_id": "sc_test_01",
+      "zone_id": "zone_00",
+      "variable": "speed",
+      "unit": "m/s",
+      "target_at": "2026-10-01T12:02:00+00:00",
+      "horizon_sec": 120,
+      "stream_b_value": 1.41431,
+      "stream_a_value": 1.05215,
+      "signed_diff": 0.36216,
+      "absolute_diff": 0.36216
+    },
+    {
+      "scenario_id": "sc_test_01",
+      "zone_id": "zone_00",
+      "variable": "queue_length",
+      "unit": "persons",
+      "target_at": "2026-10-01T12:02:00+00:00",
+      "horizon_sec": 120,
+      "stream_b_value": 6.6949,
+      "stream_a_value": 1.04915,
+      "signed_diff": 5.64575,
+      "absolute_diff": 5.64575
+    },
+    {
+      "scenario_id": "sc_test_01",
+      "zone_id": "zone_01",
+      "variable": "density",
+      "unit": "p/m2",
+      "target_at": "2026-10-01T12:00:30+00:00",
+      "horizon_sec": 30,
+      "stream_b_value": 1.33962,
+      "stream_a_value": 0.71489,
+      "signed_diff": 0.62473,
+      "absolute_diff": 0.62473
+    },
+    {
+      "scenario_id": "sc_test_01",
+      "zone_id": "zone_01",
+      "variable": "speed",
+      "unit": "m/s",
+      "target_at": "2026-10-01T12:00:30+00:00",
+      "horizon_sec": 30,
+      "stream_b_value": 1.46133,
+      "stream_a_value": 1.04338,
+      "signed_diff": 0.41795,
+      "absolute_diff": 0.41795
+    },
+    {
+      "scenario_id": "sc_test_01",
+      "zone_id": "zone_01",
+      "variable": "queue_length",
+      "unit": "persons",
+      "target_at": "2026-10-01T12:00:30+00:00",
+      "horizon_sec": 30,
+      "stream_b_value": 2.32195,
+      "stream_a_value": 0.01057,
+      "signed_diff": 2.31138,
+      "absolute_diff": 2.31138
+    },
+    {
+      "scenario_id": "sc_test_01",
+      "zone_id": "zone_01",
+      "variable": "density",
+      "unit": "p/m2",
+      "target_at": "2026-10-01T12:01:00+00:00",
+      "horizon_sec": 60,
+      "stream_b_value": 1.93741,
+      "stream_a_value": 0.94906,
+      "signed_diff": 0.98835,
+      "absolute_diff": 0.98835
+    },
+    {
+      "scenario_id": "sc_test_01",
+      "zone_id": "zone_01",
+      "variable": "speed",
+      "unit": "m/s",
+      "target_at": "2026-10-01T12:01:00+00:00",
+      "horizon_sec": 60,
+      "stream_b_value": 1.42542,
+      "stream_a_value": 1.32646,
+      "signed_diff": 0.09896,
+      "absolute_diff": 0.09896
+    },
+    {
+      "scenario_id": "sc_test_01",
+      "zone_id": "zone_01",
+      "variable": "queue_length",
+      "unit": "persons",
+      "target_at": "2026-10-01T12:01:00+00:00",
+      "horizon_sec": 60,
+      "stream_b_value": 5.65915,
+      "stream_a_value": 0.52186,
+      "signed_diff": 5.13729,
+      "absolute_diff": 5.13729
+    },
+    {
+      "scenario_id": "sc_test_01",
+      "zone_id": "zone_01",
+      "variable": "density",
+      "unit": "p/m2",
+      "target_at": "2026-10-01T12:02:00+00:00",
+      "horizon_sec": 120,
+      "stream_b_value": 2.0628,
+      "stream_a_value": 1.09976,
+      "signed_diff": 0.96304,
+      "absolute_diff": 0.96304
+    },
+    {
+      "scenario_id": "sc_test_01",
+      "zone_id": "zone_01",
+      "variable": "speed",
+      "unit": "m/s",
+      "target_at": "2026-10-01T12:02:00+00:00",
+      "horizon_sec": 120,
+      "stream_b_value": 1.41175,
+      "stream_a_value": 0.97022,
+      "signed_diff": 0.44153,
+      "absolute_diff": 0.44153
+    },
+    {
+      "scenario_id": "sc_test_01",
+      "zone_id": "zone_01",
+      "variable": "queue_length",
+      "unit": "persons",
+      "target_at": "2026-10-01T12:02:00+00:00",
+      "horizon_sec": 120,
+      "stream_b_value": 7.07948,
+      "stream_a_value": 0.77415,
+      "signed_diff": 6.30533,
+      "absolute_diff": 6.30533
+    },
+    {
+      "scenario_id": "sc_test_01",
+      "zone_id": "zone_02",
+      "variable": "density",
+      "unit": "p/m2",
+      "target_at": "2026-10-01T12:00:30+00:00",
+      "horizon_sec": 30,
+      "stream_b_value": 1.33962,
+      "stream_a_value": 0.92704,
+      "signed_diff": 0.41258,
+      "absolute_diff": 0.41258
+    },
+    {
+      "scenario_id": "sc_test_01",
+      "zone_id": "zone_02",
+      "variable": "speed",
+      "unit": "m/s",
+      "target_at": "2026-10-01T12:00:30+00:00",
+      "horizon_sec": 30,
+      "stream_b_value": 1.46159,
+      "stream_a_value": 1.38023,
+      "signed_diff": 0.08136,
+      "absolute_diff": 0.08136
+    }
+  ],
+  "unavailable": {
+    "zone_00::inflow": "unavailable",
+    "zone_00::outflow": "unavailable",
+    "zone_01::inflow": "unavailable",
+    "zone_01::outflow": "unavailable",
+    "zone_02::inflow": "unavailable",
+    "zone_02::outflow": "unavailable",
+    "zone_03::inflow": "unavailable",
+    "zone_03::outflow": "unavailable",
+    "zone_04::inflow": "unavailable",
+    "zone_04::outflow": "unavailable",
+    "zone_05::inflow": "unavailable",
+    "zone_05::outflow": "unavailable"
+  },
+  "unit_skipped": []
+}

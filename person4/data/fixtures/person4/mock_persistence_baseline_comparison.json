@@ -1,0 +1,56 @@
+{
+  "WARNING": "SYNTHETIC FIXTURE ONLY \u2014 NOT VALIDATED. Do NOT use for real emergency decisions.",
+  "baseline": "persistence",
+  "n_paired": 5340,
+  "summary": {
+    "density": {
+      "n_pairs": 1602,
+      "mean_signed_diff": 0.17139,
+      "std_signed_diff": 0.6229,
+      "mean_abs_diff": 0.54914,
+      "std_abs_diff": 0.34034
+    },
+    "speed": {
+      "n_pairs": 1602,
+      "mean_signed_diff": -0.00825,
+      "std_signed_diff": 0.3194,
+      "mean_abs_diff": 0.2724,
+      "std_abs_diff": 0.16698
+    },
+    "inflow": {
+      "status": "unavailable"
+    },
+    "outflow": {
+      "status": "unavailable"
+    },
+    "queue_length": {
+      "n_pairs": 1602,
+      "mean_signed_diff": 0.76774,
+      "std_signed_diff": 1.67779,
+      "mean_abs_diff": 1.52738,
+      "std_abs_diff": 1.03515
+    },
+    "exit_open": {
+      "n_pairs": 534,
+      "mean_signed_diff": 0.01892,
+      "std_signed_diff": 0.26223,
+      "mean_abs_diff": 0.13266,
+      "std_abs_diff": 0.22699
+    },
+    "_unit_skipped_count": 0,
+    "_unavailable_pairs": [
+      "zone_00::inflow",
+      "zone_00::outflow",
+      "zone_01::inflow",
+      "zone_01::outflow",
+      "zone_02::inflow",
+      "zone_02::outflow",
+      "zone_03::inflow",
+      "zone_03::outflow",
+      "zone_04::inflow",
+      "zone_04::outflow",
+      "zone_05::inflow",
+      "zone_05::outflow"
+    ]
+  }
+}
