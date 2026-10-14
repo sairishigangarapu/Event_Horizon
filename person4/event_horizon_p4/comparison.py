@@ -15,7 +15,7 @@ Contract:
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, List, Optional, Tuple
 
 from .config import STREAM_A_ID, STREAM_B_ID, VAR_NAMES, VAR_UNITS
