@@ -2,19 +2,43 @@ import os
 import torch
 import torch.nn as nn
 import numpy as np
-from typing import List, Dict, Tuple, Any
+from typing import List, Dict, Tuple, Any, Optional
 
 ZONE_TYPES = ["entrance", "corridor", "assembly", "stairway", "exit"]
+NODE_STATIC_NAMES = [f"zone_type_{t}" for t in ZONE_TYPES] + ["capacity_norm", "area_norm", "has_exit"]
+EDGE_STATIC_NAMES = ["width_norm", "distance_norm", "is_reverse_copy", "is_traversable"]
+EDGE_DIRECTIONS = ("unidirectional", "bidirectional")
+REVERSE_EDGE_SUFFIX = "__rev"
 
 class SpatialGraphBuilder:
     """
-    Constructs normalized adjacency and edge feature tensors from venue layout.
-    Also exposes static node descriptors consumed by the GraphHyperNetwork.
+    Constructs the message-passing graph, edge features and static node descriptors
+    consumed by the GraphHyperNetwork.
+
+    Every connection yields two message-passing edges, in connection order:
+      forward  edge_id        from_zone -> to_zone
+      reverse  edge_id__rev   to_zone -> from_zone
+    Reverse copies let downstream state (e.g. a closed exit) reach upstream zones.
+    They do not imply people can walk that way: physical movement is from_zone -> to_zone
+    (as in CrowdSimulator), and only a "bidirectional" connection is traversable in reverse.
+
+    Edge attributes (EDGE_STATIC_NAMES):
+      width_norm, distance_norm   physical geometry (width/5 m, distance/50 m)
+      is_reverse_copy             1 for the generated reverse message edge
+      is_traversable              1 if people may physically move in this edge's direction
     """
-    def __init__(self, zones: List[Dict[str, Any]], connections: List[Dict[str, Any]]):
+    def __init__(
+        self,
+        zones: List[Dict[str, Any]],
+        connections: List[Dict[str, Any]],
+        map_version: str = "v1.0"
+    ):
         self.zones = zones
         self.connections = connections
+        self.map_version = map_version
         self.zone_ids = [z["zone_id"] for z in zones]
+        if len(set(self.zone_ids)) != len(self.zone_ids):
+            raise ValueError("Duplicate zone_id in venue layout")
         self.zone_to_idx = {z_id: i for i, z_id in enumerate(self.zone_ids)}
         self.num_nodes = len(self.zone_ids)
 
@@ -29,80 +53,162 @@ class SpatialGraphBuilder:
             ])
         self.node_static = torch.tensor(node_static, dtype=torch.float32)
 
-        # Build edge index and edge attributes
+        # Build edge index, edge ids and edge attributes (forward edge, then its reverse copy)
         edge_indices = []
         edge_attrs = []
+        self.edge_ids: List[str] = []
 
         for conn in connections:
+            direction = conn.get("direction", "unidirectional")
+            if direction not in EDGE_DIRECTIONS:
+                raise ValueError(f"Unknown direction '{direction}' on connection {conn.get('edge_id')}")
+            for endpoint in ("from_zone", "to_zone"):
+                if conn[endpoint] not in self.zone_to_idx:
+                    raise ValueError(f"Connection {conn.get('edge_id')} references unknown zone '{conn[endpoint]}'")
             u = self.zone_to_idx[conn["from_zone"]]
             v = self.zone_to_idx[conn["to_zone"]]
-            width = float(conn.get("width_m", 3.0))
-            dist = float(conn.get("distance_m", 25.0))
-            edge_indices.append([u, v])
-            edge_attrs.append([width / 5.0, dist / 50.0])
+            width = float(conn.get("width_m", 3.0)) / 5.0
+            dist = float(conn.get("distance_m", 25.0)) / 50.0
+            reverse_traversable = 1.0 if direction == "bidirectional" else 0.0
 
-            # If bidirectional, also add reverse
-            if conn.get("direction") == "bidirectional":
-                edge_indices.append([v, u])
-                edge_attrs.append([width / 5.0, dist / 50.0])
+            edge_indices.append([u, v])
+            edge_attrs.append([width, dist, 0.0, 1.0])
+            self.edge_ids.append(conn["edge_id"])
+
+            edge_indices.append([v, u])
+            edge_attrs.append([width, dist, 1.0, reverse_traversable])
+            self.edge_ids.append(conn["edge_id"] + REVERSE_EDGE_SUFFIX)
+
+        if len(set(self.edge_ids)) != len(self.edge_ids):
+            raise ValueError("Duplicate edge_id in venue layout")
 
         if len(edge_indices) > 0:
             self.edge_index = torch.tensor(edge_indices, dtype=torch.long).t().contiguous()
             self.edge_attr = torch.tensor(edge_attrs, dtype=torch.float32)
         else:
             self.edge_index = torch.zeros((2, 0), dtype=torch.long)
-            self.edge_attr = torch.zeros((0, 2), dtype=torch.float32)
+            self.edge_attr = torch.zeros((0, len(EDGE_STATIC_NAMES)), dtype=torch.float32)
+
+        self.num_edges = self.edge_index.size(1)
+        assert self.num_edges == 2 * len(connections) == len(self.edge_ids)
+        assert self.edge_attr.shape == (self.num_edges, len(EDGE_STATIC_NAMES))
+
+    def metadata(self) -> Dict[str, Any]:
+        """Identifiers and feature names that a spatial checkpoint must match."""
+        return {
+            "map_version": self.map_version,
+            "zone_ids": list(self.zone_ids),
+            "edge_ids": list(self.edge_ids),
+            "node_static_names": list(NODE_STATIC_NAMES),
+            "edge_static_names": list(EDGE_STATIC_NAMES),
+        }
+
+def _save_checkpoint(module: nn.Module, filepath: str):
+    dirname = os.path.dirname(filepath)
+    if dirname:
+        os.makedirs(dirname, exist_ok=True)
+    torch.save({
+        "state_dict": module.state_dict(),
+        "version": module.version,
+        "config": dict(module.config),
+        "metadata": dict(module.metadata),
+    }, filepath)
+
+def _load_checkpoint(module: nn.Module, filepath: str):
+    checkpoint = torch.load(filepath, map_location="cpu", weights_only=True)
+    saved_config = checkpoint.get("config")
+    if saved_config != module.config:
+        raise ValueError(
+            f"Incompatible {type(module).__name__} checkpoint {filepath}: "
+            f"saved config {saved_config} does not match expected {module.config}"
+        )
+    module.load_state_dict(checkpoint["state_dict"])
+    module.version = checkpoint.get("version", module.version)
+    module.metadata = dict(checkpoint.get("metadata", {}))
 
 class GraphHyperNetwork(nn.Module):
     """
     Hypernetwork that GENERATES the node values and edge values consumed by the GNN.
 
-    Node values  v[z,t] are generated from the zone's static descriptors and its dynamic
-    context (observed variables, ages, masks and the FULL decision-tree vector D[z,t]).
-    Edge values  e[(u,v),t] are generated from the connection's static geometry plus the
+    Node values  Vn[z,t] are generated from the zone's static descriptors and its dynamic
+    context (observed values, ages, report/freshness masks, the FULL decision-tree vector D[z,t]
+    and its masks; see crowd_reliability.ml.spatial.SPATIAL_FEATURE_SCHEMA).
+    Edge values  Ve[(u,v),t] are generated from the edge's static attributes plus the
     latent codes of its two endpoint zones, so a link's effective behaviour (e.g. capacity,
     flow resistance) depends on the current state of the zones it joins.
+
+    Input normalization lives in buffers (saved with the weights) and is applied only to
+    continuous features; entries marked invalid by dyn_valid are zeroed before and after it.
 
     Channel preservation: D[z,t] enters the hypernetwork unreduced. The temporal forecaster
     still receives D[z,t] directly, independent of this module.
     """
     def __init__(
         self,
-        dyn_dim: int = 24,
+        dyn_dim: int = 36,
         static_node_dim: int = 8,
-        static_edge_dim: int = 2,
+        static_edge_dim: int = 4,
         node_out_dim: int = 16,
         edge_out_dim: int = 4,
-        hidden_dim: int = 32
+        hidden_dim: int = 32,
+        seed: Optional[int] = None
     ):
         super().__init__()
         self.node_out_dim = node_out_dim
         self.edge_out_dim = edge_out_dim
-        self.version = "hypernet_v1"
+        self.version = "hypernet_v2"
+        self.config = {
+            "dyn_dim": dyn_dim, "static_node_dim": static_node_dim, "static_edge_dim": static_edge_dim,
+            "node_out_dim": node_out_dim, "edge_out_dim": edge_out_dim, "hidden_dim": hidden_dim,
+        }
+        self.metadata: Dict[str, Any] = {"seed": seed}
 
-        self.node_encoder = nn.Sequential(
-            nn.Linear(dyn_dim + static_node_dim, hidden_dim),
-            nn.ReLU(),
-            nn.Linear(hidden_dim, hidden_dim),
-            nn.ReLU(),
-        )
-        self.node_head = nn.Linear(hidden_dim, node_out_dim)
+        with torch.random.fork_rng():
+            if seed is not None:
+                torch.manual_seed(seed)
+            self.node_encoder = nn.Sequential(
+                nn.Linear(dyn_dim + static_node_dim, hidden_dim),
+                nn.ReLU(),
+                nn.Linear(hidden_dim, hidden_dim),
+                nn.ReLU(),
+            )
+            self.node_head = nn.Linear(hidden_dim, node_out_dim)
 
-        self.edge_encoder = nn.Sequential(
-            nn.Linear(2 * hidden_dim + static_edge_dim, hidden_dim),
-            nn.ReLU(),
-        )
-        self.edge_head = nn.Linear(hidden_dim, edge_out_dim)
+            self.edge_encoder = nn.Sequential(
+                nn.Linear(2 * hidden_dim + static_edge_dim, hidden_dim),
+                nn.ReLU(),
+            )
+            self.edge_head = nn.Linear(hidden_dim, edge_out_dim)
         self.softplus = nn.Softplus()  # edge values are non-negative (capacity/resistance-like)
+
+        # Identity normalization until set_input_normalization is called
+        self.register_buffer("input_mean", torch.zeros(dyn_dim))
+        self.register_buffer("input_std", torch.ones(dyn_dim))
+        self.register_buffer("input_continuous", torch.zeros(dyn_dim, dtype=torch.bool))
+
+    def set_input_normalization(self, mean, std, continuous: torch.Tensor, scaler_id: str):
+        self.input_mean.copy_(torch.as_tensor(mean, dtype=torch.float32))
+        self.input_std.copy_(torch.as_tensor(std, dtype=torch.float32))
+        self.input_continuous.copy_(torch.as_tensor(continuous, dtype=torch.bool))
+        self.metadata["scaler_id"] = scaler_id
+
+    def normalize_inputs(self, dyn_ctx: torch.Tensor, dyn_valid: Optional[torch.Tensor] = None) -> torch.Tensor:
+        if dyn_valid is None:
+            dyn_valid = torch.ones_like(dyn_ctx)
+        x = dyn_ctx * dyn_valid
+        scaled = (x - self.input_mean) / self.input_std
+        return torch.where(self.input_continuous, scaled, x) * dyn_valid
 
     def forward(
         self,
         dyn_ctx: torch.Tensor,        # [num_nodes, dyn_dim]
         static_node: torch.Tensor,    # [num_nodes, static_node_dim]
         edge_index: torch.Tensor,     # [2, num_edges]
-        static_edge: torch.Tensor     # [num_edges, static_edge_dim]
+        static_edge: torch.Tensor,    # [num_edges, static_edge_dim]
+        dyn_valid: Optional[torch.Tensor] = None  # [num_nodes, dyn_dim], 1 = valid entry
     ) -> Tuple[torch.Tensor, torch.Tensor]:
-        code = self.node_encoder(torch.cat([dyn_ctx, static_node], dim=-1))
+        x = self.normalize_inputs(dyn_ctx, dyn_valid)
+        code = self.node_encoder(torch.cat([x, static_node], dim=-1))
         node_values = self.node_head(code)  # [num_nodes, node_out_dim]
 
         if edge_index.size(1) == 0:
@@ -114,18 +220,18 @@ class GraphHyperNetwork(nn.Module):
         return node_values, edge_values
 
     def save(self, filepath: str):
-        os.makedirs(os.path.dirname(filepath), exist_ok=True)
-        torch.save({"state_dict": self.state_dict(), "version": self.version}, filepath)
+        _save_checkpoint(self, filepath)
 
     def load(self, filepath: str):
-        checkpoint = torch.load(filepath, map_location="cpu", weights_only=True)
-        self.load_state_dict(checkpoint["state_dict"])
-        self.version = checkpoint.get("version", self.version)
+        _load_checkpoint(self, filepath)
 
 class EdgeAwareGNNLayer(nn.Module):
     """
-    Edge-aware graph message passing layer:
-    Aggregates neighbor features weighted by edge geometry (width, distance).
+    Edge-aware graph message passing layer.
+    Each edge (u -> v) sends msg_mlp([x[u], edge_attr[u->v]]) to v, where edge_attr is the
+    hypernetwork-generated edge value Ve; messages are sum-aggregated and added to a self
+    transform. With no edges the aggregated term is zero and the layer reduces to the same
+    self transform + LayerNorm + ReLU (the no-graph ablation).
     """
     def __init__(self, node_in_dim: int, edge_in_dim: int, out_dim: int):
         super().__init__()
@@ -161,15 +267,30 @@ class EdgeAwareGNNLayer(nn.Module):
 
 class SpatialGNN(nn.Module):
     """
-    Two-layer edge-aware Spatial GNN encoding inter-zone pedestrian flow relationships.
-    Computes H[t] spatial context per zone.
+    Two-layer edge-aware Spatial GNN over the hypernetwork-generated node values Vn[Z,16]
+    and edge values Ve[E,4]. Computes the spatial embedding H[Z,embed_dim] per zone.
     """
-    def __init__(self, node_in_dim: int = 18, edge_in_dim: int = 2, hidden_dim: int = 32, embed_dim: int = 16):
+    def __init__(
+        self,
+        node_in_dim: int = 16,
+        edge_in_dim: int = 4,
+        hidden_dim: int = 32,
+        embed_dim: int = 16,
+        seed: Optional[int] = None
+    ):
         super().__init__()
-        self.layer1 = EdgeAwareGNNLayer(node_in_dim, edge_in_dim, hidden_dim)
-        self.layer2 = EdgeAwareGNNLayer(hidden_dim, edge_in_dim, embed_dim)
+        with torch.random.fork_rng():
+            if seed is not None:
+                torch.manual_seed(seed)
+            self.layer1 = EdgeAwareGNNLayer(node_in_dim, edge_in_dim, hidden_dim)
+            self.layer2 = EdgeAwareGNNLayer(hidden_dim, edge_in_dim, embed_dim)
         self.embed_dim = embed_dim
-        self.version = "gnn_edge_v1"
+        self.version = "gnn_edge_v2"
+        self.config = {
+            "node_in_dim": node_in_dim, "edge_in_dim": edge_in_dim,
+            "hidden_dim": hidden_dim, "embed_dim": embed_dim,
+        }
+        self.metadata: Dict[str, Any] = {"seed": seed}
 
     def forward(self, x: torch.Tensor, edge_index: torch.Tensor, edge_attr: torch.Tensor) -> torch.Tensor:
         h1 = self.layer1(x, edge_index, edge_attr)
@@ -177,10 +298,7 @@ class SpatialGNN(nn.Module):
         return h2  # [num_nodes, embed_dim]
 
     def save(self, filepath: str):
-        os.makedirs(os.path.dirname(filepath), exist_ok=True)
-        torch.save({"state_dict": self.state_dict(), "version": self.version}, filepath)
+        _save_checkpoint(self, filepath)
 
     def load(self, filepath: str):
-        checkpoint = torch.load(filepath, map_location="cpu", weights_only=True)
-        self.load_state_dict(checkpoint["state_dict"])
-        self.version = checkpoint.get("version", self.version)
+        _load_checkpoint(self, filepath)
