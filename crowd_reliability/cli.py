@@ -1,5 +1,6 @@
 import os
 import sys
+import shutil
 import argparse
 from datetime import datetime, timezone, timedelta
 from typing import List, Dict, Any
@@ -270,6 +271,99 @@ def cmd_evaluate(split: str = "test"):
     finally:
         db.close()
 
+def _bump_minor(version: str) -> str:
+    parts = version.lstrip("v").split(".")
+    try:
+        major, minor = int(parts[0]), int(parts[1])
+    except (IndexError, ValueError):
+        return version + "+spatial"
+    return f"v{major}.{minor + 1}.0"
+
+def cmd_spatial_init(dry_run: bool = False, seed: int = 0):
+    """
+    Creates a fresh, UNTRAINED hypernetwork+GNN pair in a new versioned directory and switches
+    the active manifest to it with a single atomic manifest replace. The tree bank and temporal
+    artifacts are not touched. The previous manifest is kept byte-for-byte as manifest.prev.json.
+
+    Rollback requires BOTH restoring manifest.prev.json AND checking out code compatible with
+    that manifest: the current code rejects legacy (root-level hypernet.pt/gnn.pt) checkpoints.
+    """
+    from crowd_reliability.ml.spatial import write_spatial_artifact
+
+    model_dir = settings.model_dir
+    manifest_path = os.path.join(model_dir, "manifest.json")
+    if not os.path.exists(manifest_path):
+        print(f"[spatial-init] No manifest at {manifest_path}; run seed-demo first.")
+        sys.exit(1)
+    old = PipelineManifest.load(manifest_path)
+
+    # Artifacts outside the spatial pair must match the manifest and stay unchanged
+    from crowd_reliability.ml.pipeline import _calc_sha256
+    for fname in ("tree_bank.joblib", "temporal_model.pt"):
+        fpath = os.path.join(model_dir, fname)
+        recorded = old.model_hashes.get(fname)
+        if recorded is None or not os.path.exists(fpath) or _calc_sha256(fpath) != recorded:
+            print(f"[spatial-init] {fname} does not match the active manifest; aborting without changes.")
+            sys.exit(1)
+
+    pipeline = ArchitecturePipeline(venue=get_default_venue(), spatial_seed=seed)
+    print("[spatial-init] Planned change (spatial pair only):")
+    print(f"  hypernet: {old.hypernet_version} -> {pipeline.hypernet.version}")
+    print(f"  gnn:      {old.gnn_version} -> {pipeline.gnn.version}")
+    print(f"  pipeline: {old.pipeline_version} -> {_bump_minor(old.pipeline_version)}")
+    print(f"  spatial_artifact_dir: {old.spatial_artifact_dir} -> spatial/<new versioned dir>")
+    print("  training_status: hypernet=untrained_initial, gnn=untrained_initial")
+    print(f"  unchanged: tree_bank.joblib {old.model_hashes['tree_bank.joblib'][:12]}, "
+          f"temporal_model.pt {old.model_hashes['temporal_model.pt'][:12]}")
+    if dry_run:
+        print("[spatial-init] Dry run: nothing written.")
+        return
+
+    rel_dir, spatial_hashes = write_spatial_artifact(pipeline.spatial, model_dir)
+
+    new = old.model_copy(deep=True)
+    new.pipeline_version = _bump_minor(old.pipeline_version)
+    new.hypernet_version = pipeline.hypernet.version
+    new.gnn_version = pipeline.gnn.version
+    new.spatial_artifact_dir = rel_dir
+    new.model_hashes = {
+        k: v for k, v in old.model_hashes.items()
+        if k not in ("hypernet.pt", "gnn.pt") and not k.startswith("spatial/")
+    }
+    new.model_hashes.update(spatial_hashes)
+    new.training_status = dict(old.training_status)
+    new.training_status["hypernet"] = "untrained_initial"
+    new.training_status["gnn"] = "untrained_initial"
+    new.training_status.setdefault("temporal", "untrained_initial")
+    new.training_status.setdefault("tree_bank", "fitted_unvalidated")
+
+    # Byte-exact recovery point, created before the active manifest is replaced.
+    # An existing backup is preserved under a timestamped name, never overwritten.
+    backup_path = os.path.join(model_dir, "manifest.prev.json")
+    if os.path.exists(backup_path):
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        preserved = os.path.join(model_dir, f"manifest.prev.{stamp}.json")
+        os.replace(backup_path, preserved)
+        print(f"[spatial-init] Existing backup preserved as {os.path.basename(preserved)}")
+    original_hash = _calc_sha256(manifest_path)
+    shutil.copy2(manifest_path, backup_path)
+    if _calc_sha256(backup_path) != original_hash:
+        os.remove(backup_path)
+        raise RuntimeError("Manifest backup is not byte-identical; aborting before the switch")
+    print(f"[spatial-init] Backup manifest.prev.json sha256 {original_hash[:12]} (byte-identical)")
+
+    new.save(manifest_path)
+
+    try:
+        ArchitecturePipeline(venue=get_default_venue()).load_pipeline(model_dir)
+    except Exception:
+        tmp_path = f"{manifest_path}.tmp"
+        shutil.copy2(backup_path, tmp_path)
+        os.replace(tmp_path, manifest_path)
+        print("[spatial-init] Verification load failed; previous manifest restored.")
+        raise
+    print(f"[spatial-init] Active spatial pair: {rel_dir} (untrained initial weights).")
+
 def main():
     parser = argparse.ArgumentParser(description="Crowd Reliability CLI")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -290,6 +384,11 @@ def main():
     p_eval = subparsers.add_parser("evaluate", help="Score forecasts against reference states")
     p_eval.add_argument("--split", type=str, default="test", help="Dataset split")
 
+    # spatial-init
+    p_sp = subparsers.add_parser("spatial-init", help="Create an untrained hypernetwork+GNN pair and switch the manifest to it")
+    p_sp.add_argument("--dry-run", action="store_true", help="Print the planned change without writing")
+    p_sp.add_argument("--seed", type=int, default=0, help="Weight initialization seed")
+
     args = parser.parse_args()
 
     if args.command == "db-init":
@@ -300,6 +399,8 @@ def main():
         cmd_replay(scenario=args.scenario, seed=args.seed)
     elif args.command == "evaluate":
         cmd_evaluate(split=args.split)
+    elif args.command == "spatial-init":
+        cmd_spatial_init(dry_run=args.dry_run, seed=args.seed)
 
 if __name__ == "__main__":
     main()
