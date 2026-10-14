@@ -1,0 +1,12 @@
+{
+  "scenario_id":"exit_restriction", "display_name":"East exit restriction and sensor outage",
+  "seed":1206, "step_seconds":5, "duration_seconds":1200,
+  "start_time_utc":"2026-10-14T10:00:00+00:00", "configuration_version":"sim-v0.1",
+  "arrival_rate_persons_per_second":2.8,
+  "arrival_events":[{"from_second":300,"until_second":580,"rate_persons_per_second":5.5}],
+  "exit_restrictions":[{"exit_zone_id":"Z_EXIT_E","from_second":300,"until_second":830}],
+  "route_detour_fraction":0.28,
+  "observation_every_seconds":15, "observation_base_delay_seconds":12,
+  "observation_dropout_probability":0.10,
+  "observation_outages":[{"source_id":"sim_gate_sensor", "zone_id":"Z_EXIT_E", "from_second":290,"until_second":540}, {"source_id":"sim_camera_B", "zone_id":"Z_ANNEX", "from_second":350,"until_second":510}]
+}

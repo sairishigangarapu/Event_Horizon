@@ -1,0 +1,18 @@
+{
+  "n_samples": 960,
+  "scenario_ids": [
+    "bottleneck_exit_closure__mc002",
+    "crowd_surge__mc002"
+  ],
+  "training_cutoff": "2026-10-14T12:04:55",
+  "feature_schema_version": "obs_only_v1",
+  "allowed_inputs": [
+    "observations",
+    "reference_states",
+    "zones"
+  ],
+  "tree_version": "dt_bank_v2",
+  "scaler_version": "scaler_obs_only_v1",
+  "seed": 44,
+  "max_depth": 6
+}

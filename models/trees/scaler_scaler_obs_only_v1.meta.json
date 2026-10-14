@@ -1,0 +1,30 @@
+{
+  "scaler_version": "scaler_obs_only_v1",
+  "feature_schema_version": "obs_only_v1",
+  "feature_names": [
+    "density_value",
+    "speed_value",
+    "inflow_value",
+    "outflow_value",
+    "queue_length_value",
+    "exit_open_value",
+    "density_age_norm",
+    "speed_age_norm",
+    "inflow_age_norm",
+    "outflow_age_norm",
+    "queue_length_age_norm",
+    "exit_open_age_norm",
+    "density_observed",
+    "speed_observed",
+    "inflow_observed",
+    "outflow_observed",
+    "queue_length_observed",
+    "exit_open_observed"
+  ],
+  "fit_scenario_ids": [
+    "bottleneck_exit_closure",
+    "crowd_surge"
+  ],
+  "fit_cutoff": "2026-10-14T12:04:55",
+  "fitted": true
+}

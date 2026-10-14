@@ -1,6 +1,16 @@
 from datetime import datetime, timezone, timedelta
 from typing import List, Dict, Tuple, Any, Optional
 from crowd_reliability.models.schema import ForecastRecord, ObservationRecord, AssessmentRecord
+from crowd_reliability.reliability.conflicts import deduplicate_reports, detect_conflicts
+from crowd_reliability.reliability.freshness import (
+    INSUFFICIENT_EVIDENCE_WINDOW_S,
+    POTENTIALLY_OUTDATED_AGE_S,
+    RAPID_CHANGE_MIN_REPORTS,
+    RAPID_CHANGE_REL_STD,
+    RAPID_CHANGE_WINDOW_S,
+    RECENT_VERIFIED_MAX_AGE_S,
+    observation_age_seconds,
+)
 
 class ComparisonResult:
     def __init__(
@@ -98,12 +108,23 @@ class ForecastComparator:
     ) -> AssessmentRecord:
         """
         Assesses evidence freshness, coverage, and report conflicts for a specific zone and variable.
+        Delegates to crowd_reliability.reliability; per_variable_flags carries both the
+        legacy flags (stale/conflict/missing) and the five independent freshness labels.
+        A stale report is flagged for verification — never asserted false due to age.
         """
         zone_var_obs = [
             o for o in observations
             if o.zone_id == zone_id and o.variable == variable and o.received_at <= evaluated_at
         ]
 
+        missing_flags = {
+            "stale": True, "conflict": False, "missing": True,
+            "recently_verified": False,
+            "potentially_outdated": False,
+            "conflicting_evidence": False,
+            "rapidly_changing": False,
+            "insufficient_current_evidence": True,
+        }
         if not zone_var_obs:
             return AssessmentRecord(
                 target_ref_id=target_ref_id,
@@ -112,27 +133,30 @@ class ForecastComparator:
                 observation_age_seconds=999.0,
                 conflict_ids=[],
                 coverage=0.0,
-                per_variable_flags={"stale": True, "conflict": False, "missing": True}
+                per_variable_flags=missing_flags
             )
 
-        # Most recent observation
-        latest_obs = max(zone_var_obs, key=lambda o: o.observed_at)
-        age_sec = max(0.0, (evaluated_at - latest_obs.observed_at).total_seconds())
+        # Collapse forwarded copies: duplicates never count as independent confirmations.
+        independent, _, _ = deduplicate_reports(zone_var_obs)
 
-        # Check for conflicts among recent reports (within last 30s)
-        recent_window = [o for o in zone_var_obs if (evaluated_at - o.observed_at).total_seconds() <= 30.0]
-        conflict_ids = []
-        is_conflict = False
+        # Most recent independent observation
+        age_sec = min(observation_age_seconds(o, evaluated_at) for o in independent)
 
-        if len(recent_window) > 1:
-            values = [o.value for o in recent_window]
+        # Check for conflicts among independent recent reports (within last 30s)
+        recent_window = [o for o in independent if observation_age_seconds(o, evaluated_at) <= 30.0]
+        is_conflict, conflict_ids = detect_conflicts(recent_window)
+
+        # Rapid change: relative std over the rapid-change window
+        rapid_window = [o for o in independent if observation_age_seconds(o, evaluated_at) <= RAPID_CHANGE_WINDOW_S]
+        is_rapid = False
+        if len(rapid_window) >= RAPID_CHANGE_MIN_REPORTS:
+            values = [o.value for o in rapid_window]
             mean_val = sum(values) / len(values)
-            for o in recent_window:
-                if mean_val > 0.1 and abs(o.value - mean_val) / (mean_val + 1e-4) > 0.4:
-                    conflict_ids.append(o.report_id)
-                    is_conflict = True
+            if abs(mean_val) > 1e-6:
+                rel_std = (sum((v - mean_val) ** 2 for v in values) / len(values)) ** 0.5 / abs(mean_val)
+                is_rapid = rel_std > RAPID_CHANGE_REL_STD
 
-        is_stale = (age_sec > 45.0)
+        is_stale = (age_sec > POTENTIALLY_OUTDATED_AGE_S)
         coverage = 1.0 if not is_stale else max(0.1, 1.0 - (age_sec - 45.0) / 100.0)
 
         return AssessmentRecord(
@@ -143,8 +167,15 @@ class ForecastComparator:
             conflict_ids=conflict_ids,
             coverage=round(coverage, 3),
             per_variable_flags={
+                # Legacy flags (kept for API/dashboard compatibility)
                 "stale": is_stale,
                 "conflict": is_conflict,
-                "missing": False
+                "missing": False,
+                # Five independent freshness labels
+                "recently_verified": age_sec <= RECENT_VERIFIED_MAX_AGE_S,
+                "potentially_outdated": is_stale,
+                "conflicting_evidence": is_conflict,
+                "rapidly_changing": is_rapid,
+                "insufficient_current_evidence": age_sec > INSUFFICIENT_EVIDENCE_WINDOW_S,
             }
         )

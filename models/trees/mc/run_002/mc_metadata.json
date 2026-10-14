@@ -1,0 +1,26 @@
+{
+  "run": 2,
+  "seed": 44,
+  "base_scenario_ids": [
+    "bottleneck_exit_closure",
+    "crowd_surge",
+    "normal_evacuation"
+  ],
+  "train_scenario_ids": [
+    "bottleneck_exit_closure__mc002",
+    "crowd_surge__mc002"
+  ],
+  "holdout_scenario_id": "normal_evacuation__mc002",
+  "tree_version": "dt_bank_v2",
+  "scaler_version": "scaler_obs_only_v1",
+  "feature_schema_version": "obs_only_v1",
+  "params": {
+    "max_depth": 6
+  },
+  "created_at": "2026-10-14T12:18:28.964809+00:00",
+  "artifacts": {
+    "tree_bank": "./models/trees/mc/run_002/tree_bank_dt_bank_v2.joblib",
+    "scaler": "./models/trees/mc/run_002/scaler_scaler_obs_only_v1.joblib",
+    "metadata": "./models/trees/mc/run_002/train_metadata.json"
+  }
+}
