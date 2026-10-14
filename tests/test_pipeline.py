@@ -45,16 +45,17 @@ def test_pipeline_step_and_serialization():
         pipeline.save_pipeline(tmp_dir)
         assert os.path.exists(os.path.join(tmp_dir, "manifest.json"))
         assert os.path.exists(os.path.join(tmp_dir, "tree_bank.joblib"))
-        assert os.path.exists(os.path.join(tmp_dir, "hypernet.pt"))
-        assert os.path.exists(os.path.join(tmp_dir, "gnn.pt"))
         assert os.path.exists(os.path.join(tmp_dir, "temporal_model.pt"))
+        spatial_dir = os.path.join(tmp_dir, pipeline.manifest.spatial_artifact_dir)
+        assert os.path.exists(os.path.join(spatial_dir, "hypernet.pt"))
+        assert os.path.exists(os.path.join(spatial_dir, "gnn.pt"))
 
         new_pipeline = ArchitecturePipeline(venue=venue)
         new_pipeline.load_pipeline(tmp_dir)
         assert new_pipeline.manifest.pipeline_version == pipeline.manifest.pipeline_version
 
         # 4. Test integrity verification: tampering with a model file raises ValueError
-        with open(os.path.join(tmp_dir, "hypernet.pt"), "ab") as f:
+        with open(os.path.join(spatial_dir, "hypernet.pt"), "ab") as f:
             f.write(b"corrupted_tampered_bytes")
 
         corrupt_pipeline = ArchitecturePipeline(venue=venue)

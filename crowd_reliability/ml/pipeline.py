@@ -12,7 +12,8 @@ from crowd_reliability.models.schema import (
 )
 from crowd_reliability.models.manifest import PipelineManifest
 from crowd_reliability.ml.tree_bank import DecisionTreeBank, TREE_CHANNELS
-from crowd_reliability.ml.graph import SpatialGraphBuilder, SpatialGNN, GraphHyperNetwork
+from crowd_reliability.ml.graph import SpatialGraphBuilder
+from crowd_reliability.ml.spatial import SpatialEncoder, stack_zone_features, write_spatial_artifact
 from crowd_reliability.ml.temporal import MultivariateTemporalForecaster, TARGET_VAR_NAMES
 from crowd_reliability.simulation.scenarios import VenueLayout, get_default_venue
 
@@ -36,7 +37,8 @@ class ArchitecturePipeline:
         venue: Optional[VenueLayout] = None,
         manifest: Optional[PipelineManifest] = None,
         lookback_steps: int = 12,
-        horizons_sec: Optional[List[int]] = None
+        horizons_sec: Optional[List[int]] = None,
+        spatial_seed: Optional[int] = 0
     ):
         self.venue = venue or get_default_venue()
         self.manifest = manifest or PipelineManifest()
@@ -46,27 +48,17 @@ class ArchitecturePipeline:
         self.tree_bank = DecisionTreeBank()
         self.graph_builder = SpatialGraphBuilder(self.venue.zones, self.venue.connections)
 
-        # Dynamic context dim fed to the hypernetwork:
+        # Per-zone non-spatial features carried into U:
         # Raw observed values (6) + ages (6) + masks (6) + tree values (6) = 24
         self.node_in_dim = 24
 
-        # Hypernetwork generates the node values and edge values the GNN operates on
-        self.hypernet = GraphHyperNetwork(
-            dyn_dim=self.node_in_dim,
-            static_node_dim=self.graph_builder.node_static.size(1),
-            static_edge_dim=self.graph_builder.edge_attr.size(1),
-            node_out_dim=16,
-            edge_out_dim=4,
-            hidden_dim=32
-        )
-        self.gnn = SpatialGNN(
-            node_in_dim=self.hypernet.node_out_dim,
-            edge_in_dim=self.hypernet.edge_out_dim,
-            hidden_dim=32,
-            embed_dim=16
-        )
+        # Hypernetwork + GNN pair. The hypernetwork reads its own masked 36-feature context
+        # (crowd_reliability.ml.spatial.SPATIAL_FEATURE_SCHEMA), which also includes the tree masks.
+        self.spatial = SpatialEncoder(self.graph_builder, seed=spatial_seed)
+        self.hypernet = self.spatial.hypernet
+        self.gnn = self.spatial.gnn
         # Most recent hypernetwork outputs, retained for inspection/export
-        self.last_generated: Dict[str, np.ndarray] = {}
+        self.last_generated: Dict[str, Any] = {}
 
         # Temporal input dim:
         # X (18) + D (6) + H (16) = 40
@@ -82,6 +74,39 @@ class ArchitecturePipeline:
         # Rolling history buffer per scenario: {zone_id: list of U vectors}
         self.history_buffer: Dict[str, Dict[str, List[np.ndarray]]] = {}
 
+    def extract_zone_features_detailed(
+        self,
+        zone_id: str,
+        as_of_time: datetime,
+        recent_observations: List[ObservationRecord]
+    ) -> Dict[str, np.ndarray]:
+        """
+        As-of snapshot without fallback substitution (used by the spatial encoder):
+        - values:   value of the selected report, 0 where no report exists
+        - ages_sec: seconds since observed_at of the selected report, 999 where none exists
+        - present:  1 if any report with received_at <= as_of_time exists
+        - fresh:    1 if the selected report is at most 90 s old
+        Per variable the report with the smallest age is selected (ties: first in input order).
+        """
+        var_indices = {v: i for i, v in enumerate(TARGET_VAR_NAMES)}
+        values = np.zeros(6, dtype=np.float32)
+        ages_sec = np.full(6, 999.0, dtype=np.float32)
+        present = np.zeros(6, dtype=np.float32)
+        fresh = np.zeros(6, dtype=np.float32)
+
+        for obs in recent_observations:
+            if obs.zone_id != zone_id or obs.received_at > as_of_time or obs.variable not in var_indices:
+                continue
+            idx = var_indices[obs.variable]
+            age = max(0.0, (as_of_time - obs.observed_at).total_seconds())
+            if age < ages_sec[idx]:
+                ages_sec[idx] = age
+                values[idx] = obs.value
+                present[idx] = 1.0
+                fresh[idx] = 1.0 if age <= 90.0 else 0.0
+
+        return {"values": values, "ages_sec": ages_sec, "present": present, "fresh": fresh}
+
     def extract_zone_features(
         self,
         zone_id: str,
@@ -94,27 +119,15 @@ class ArchitecturePipeline:
         - ages_sec: observation age in seconds
         - obs_masks: 1 if observed recently (within 90s), 0 if missing
         """
-        var_indices = {v: i for i, v in enumerate(TARGET_VAR_NAMES)}
-        raw_values = np.zeros(6, dtype=np.float32)
-        ages_sec = np.full(6, 999.0, dtype=np.float32)
-        obs_masks = np.zeros(6, dtype=np.float32)
+        detailed = self.extract_zone_features_detailed(zone_id, as_of_time, recent_observations)
+        return self._legacy_zone_features(detailed)
 
-        # Filter observations for this zone received at or before as_of_time
-        zone_obs = [
-            o for o in recent_observations
-            if o.zone_id == zone_id and o.received_at <= as_of_time
-        ]
-
-        # Find latest report for each variable
-        for obs in zone_obs:
-            if obs.variable in var_indices:
-                idx = var_indices[obs.variable]
-                # Age calculation relative to as_of_time
-                age = max(0.0, (as_of_time - obs.observed_at).total_seconds())
-                if age < ages_sec[idx]:
-                    ages_sec[idx] = age
-                    raw_values[idx] = obs.value
-                    obs_masks[idx] = 1.0 if age <= 90.0 else 0.0
+    @staticmethod
+    def _legacy_zone_features(detailed: Dict[str, np.ndarray]) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """Tree-bank / U features: fresh-only mask, fallback defaults, ages normalized to [0, 1]."""
+        raw_values = detailed["values"].copy()
+        ages_sec = detailed["ages_sec"]
+        obs_masks = detailed["fresh"].copy()
 
         # Default fallback values for unobserved variables
         if obs_masks[0] == 0: raw_values[0] = 0.8  # density
@@ -151,11 +164,14 @@ class ArchitecturePipeline:
         tree_vectors: List[List[float]] = []
         tree_masks_list: List[List[int]] = []
         node_features_list: List[np.ndarray] = []
+        detailed_list: List[Dict[str, np.ndarray]] = []
 
         for z_data in self.venue.zones:
             z_id = z_data["zone_id"]
             has_exit = z_data.get("has_exit", False)
-            raw_vals, norm_ages, obs_masks = self.extract_zone_features(z_id, as_of_time, recent_observations)
+            detailed = self.extract_zone_features_detailed(z_id, as_of_time, recent_observations)
+            detailed_list.append(detailed)
+            raw_vals, norm_ages, obs_masks = self._legacy_zone_features(detailed)
 
             # Combined input for decision tree
             dt_feat = np.concatenate([raw_vals, norm_ages, obs_masks])
@@ -175,27 +191,24 @@ class ArchitecturePipeline:
             )
             tree_records.append(tree_rec)
 
-            # GNN node input: [raw (6), norm_ages (6), obs_masks (6), d_vals (6)] = 24
+            # Non-spatial U features: [raw (6), norm_ages (6), obs_masks (6), d_vals (6)] = 24
             node_feat = np.concatenate([raw_vals, norm_ages, obs_masks, np.array(d_vals, dtype=np.float32)])
             node_features_list.append(node_feat)
 
         # 2. Hypernetwork generates node values and edge values, then GNN contextualizes them
-        dyn_ctx = torch.tensor(np.array(node_features_list), dtype=torch.float32)
-        with torch.no_grad():
-            node_values, edge_values = self.hypernet(
-                dyn_ctx,
-                self.graph_builder.node_static,
-                self.graph_builder.edge_index,
-                self.graph_builder.edge_attr
-            )
-            h_embeddings = self.gnn(
-                node_values,
-                self.graph_builder.edge_index,
-                edge_values
-            ).cpu().numpy()  # [num_zones, 16]
+        spatial_out = self.spatial.encode_spatial(
+            stack_zone_features(detailed_list),
+            np.array(tree_vectors, dtype=np.float32),
+            np.array(tree_masks_list, dtype=np.float32),
+            tree_version=self.manifest.tree_version,
+        )
+        h_embeddings = spatial_out.H  # [num_zones, 16]
         self.last_generated = {
-            "node_values": node_values.cpu().numpy(),
-            "edge_values": edge_values.cpu().numpy(),
+            "node_values": spatial_out.Vn,
+            "edge_values": spatial_out.Ve,
+            "zone_ids": spatial_out.zone_ids,
+            "edge_ids": spatial_out.edge_ids,
+            "version_metadata": spatial_out.version_metadata,
         }
 
         # 3. Assemble U[z, t] vector per zone and update history
@@ -275,21 +288,25 @@ class ArchitecturePipeline:
     def save_pipeline(self, model_dir: str):
         os.makedirs(model_dir, exist_ok=True)
         tb_path = os.path.join(model_dir, "tree_bank.joblib")
-        hn_path = os.path.join(model_dir, "hypernet.pt")
-        gnn_path = os.path.join(model_dir, "gnn.pt")
         tm_path = os.path.join(model_dir, "temporal_model.pt")
 
         self.tree_bank.save(tb_path)
-        self.hypernet.save(hn_path)
-        self.gnn.save(gnn_path)
         self.temporal_model.save(tm_path)
+        # The hypernetwork+GNN pair goes into its own new versioned directory
+        spatial_dir, spatial_hashes = write_spatial_artifact(self.spatial, model_dir)
 
         self.manifest.model_hashes = {
             "tree_bank.joblib": _calc_sha256(tb_path),
-            "hypernet.pt": _calc_sha256(hn_path),
-            "gnn.pt": _calc_sha256(gnn_path),
             "temporal_model.pt": _calc_sha256(tm_path),
+            **spatial_hashes,
         }
+        self.manifest.hypernet_version = self.hypernet.version
+        self.manifest.gnn_version = self.gnn.version
+        self.manifest.spatial_artifact_dir = spatial_dir
+        self.manifest.training_status["hypernet"] = self.hypernet.metadata.get("training_status", "unknown")
+        self.manifest.training_status["gnn"] = self.gnn.metadata.get("training_status", "unknown")
+        self.manifest.training_status.setdefault("temporal", "untrained_initial")
+        # Written last and atomically: this is the switch to the new artifact set
         self.manifest.save(os.path.join(model_dir, "manifest.json"))
 
     def load_pipeline(self, model_dir: str):
@@ -297,27 +314,33 @@ class ArchitecturePipeline:
         if os.path.exists(manifest_path):
             self.manifest = PipelineManifest.load(manifest_path)
 
-        def _verify_file(filename: str, filepath: str):
+        def _verify_file(filename: str, filepath: str, required: bool = False):
             if filename in self.manifest.model_hashes:
                 expected = self.manifest.model_hashes[filename]
                 actual = _calc_sha256(filepath)
                 if expected != actual:
                     raise ValueError(f"Model integrity verification failed for {filename}")
+            elif required:
+                raise ValueError(f"Model integrity verification failed for {filename}: no recorded hash")
 
         tb_path = os.path.join(model_dir, "tree_bank.joblib")
         if os.path.exists(tb_path):
             _verify_file("tree_bank.joblib", tb_path)
             self.tree_bank.load(tb_path)
 
-        hn_path = os.path.join(model_dir, "hypernet.pt")
-        if os.path.exists(hn_path):
-            _verify_file("hypernet.pt", hn_path)
-            self.hypernet.load(hn_path)
-
-        gnn_path = os.path.join(model_dir, "gnn.pt")
-        if os.path.exists(gnn_path):
-            _verify_file("gnn.pt", gnn_path)
-            self.gnn.load(gnn_path)
+        if self.manifest.spatial_artifact_dir:
+            # Verify both files of the pair before loading either
+            spatial_dir = os.path.join(model_dir, self.manifest.spatial_artifact_dir)
+            for filename in ("hypernet.pt", "gnn.pt"):
+                rel = f"{self.manifest.spatial_artifact_dir}/{filename}"
+                _verify_file(rel, os.path.join(spatial_dir, filename), required=True)
+            self.spatial.load(spatial_dir)
+        elif any(os.path.exists(os.path.join(model_dir, f)) for f in ("hypernet.pt", "gnn.pt")):
+            raise ValueError(
+                "Legacy spatial checkpoint (hypernet.pt/gnn.pt at the model root, no spatial_artifact_dir) "
+                f"is incompatible with {self.hypernet.version}/{self.gnn.version}. "
+                "Run `python -m crowd_reliability.cli spatial-init` to create a compatible pair."
+            )
 
         tm_path = os.path.join(model_dir, "temporal_model.pt")
         if os.path.exists(tm_path):
