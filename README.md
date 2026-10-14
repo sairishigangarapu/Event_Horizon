@@ -290,3 +290,34 @@ If the submitted implementation uses containers, add its actual Dockerfile(s), a
 
 Replace project/team/access fields; align commands and configuration with actual code; pin dependencies; bundle the required assets; record clean-machine test results; and complete AI, synthetic-data and third-party disclosures. Remove template instructions only after the corresponding facts and evaluator steps have been verified.
 
+## 18. Security & model-readiness audit (verified)
+
+An adversarial code audit traced the **integrated forecast path** end-to-end: `cli.cmd_replay`/`cmd_seed_demo` → `ArchitecturePipeline.step` (`crowd_reliability/ml/pipeline.py`) → `DecisionTreeBank.predict_zone` (`ml/tree_bank.py`) → `SpatialEncoder.encode_spatial` (`ml/spatial.py`) → `MultivariateTemporalForecaster.forward` (`ml/temporal.py`). Findings below are confirmed against the artifacts in `models/production/` by live probe, not by docstrings/tests.
+
+### Verified production readiness
+
+| Component | Artifact | State | Risk |
+| --- | --- | --- | --- |
+| Decision tree bank | `models/production/tree_bank.joblib` | `dt_bank_v1`, fitted, **6 channels preserved**, `scaler=None` | Medium — scaler contract not enforced (see 2) |
+| Temporal GRU | `models/production/temporal_model.pt` | `gru_forecaster_v1`, `untrained_initial`, `metrics_summary=null` | **Critical — served untrained** |
+| Hypernetwork + GNN | `models/production/spatial/.../` | `untrained_initial` (pair `5a89a8…`) | **Critical — served untrained** |
+| Manifest | `models/production/manifest.json` | `is_active=true`, no readiness gate | **Critical** |
+| Forecast output | `schema.ForecastRecord` | 6 canonical channels; `exit_open` bounded in [0,1] (Sigmoid / `predict_proba`); numeric heads `ReLU`-clamped ≥ 0 | Channel layout/bounds OK; masks & units missing |
+| Reliability | `reliability/assess.py` + `services/comparator.py` | 5 independent labels present | P2 thresholds/provenance not wired to API (see 5) |
+
+### Open critical issues (do not serve as production-ready without these)
+
+1. **[CRITICAL] Untrained neural stack served as active.** `seed-demo`/`save_pipeline` (cli.py:168) save freshly-initialized GRU/GNN/hypernetwork with no training step; `load_pipeline` and `step` contain **no readiness gate**. `manifest.training_status` = `untrained_initial` yet `is_active=true`. `/api/forecasts` and `replay` serve random-weight forecasts. **Fix:** add a readiness gate in `load_pipeline` that raises if any `training_status != trained_validated` or `metrics_summary is None`.
+
+2. **[CRITICAL] Non-deterministic inference.** `step` (pipeline.py:245) calls `self.temporal_model(...)` while the model is in `train()` mode → GRU dropout (0.1) fires on every call. Verified: two identical `step()` calls differ by up to 0.0457 on 55/126 forecasts; `.eval()` yields 0.0 difference. Violates the byte-identical re-run contract. **Fix:** `self.temporal_model.eval()` before inference (ideally enforced in `load_pipeline`).
+
+3. **[CRITICAL] Missing-artifact silent fallback.** `load_pipeline` (pipeline.py:327) `if os.path.exists(tb_path)` has no `else`/raise; a missing `tree_bank.joblib`/`temporal_model.pt`/spatial pair leaves an **unfitted** bank whose `predict_zone` (`tree_bank.py:94`) hands back heuristic defaults (`feature_row[0]`, `[1]`, `[2]`) with `channel_masks=[1,1,1,1,1,1]` — presenting synthetic values as valid. **Fix:** require all three artifacts; remove/ gate the `not self.is_fitted` branch.
+
+4. **[CONTRACT] Scaler dropped at production inference.** `seed-demo` (cli.py:186) fits the bank **without** a scaler, so production `tree_bank.joblib` has `scaler=None` while `manifest.scaler_version="standard_scaler_v1"`. The real scaler at `models/trees/scaler_scaler_obs_only_v1.joblib` (for the v2 dataset bank) is orphaned. `load_pipeline` hash-checks the file but never verifies scaler presence/version. **Fix:** fit+attach+save the scaler in `seed-demo` (as `tree_train.train_tree_bank` does) and assert `bank.scaler` is present and `bank.version == manifest.tree_version` after load.
+
+5. **[CONTRACT] P2 reliability features dead-wired.** `api.py:215` calls `ForecastComparator.assess_information` (a P1 reimplementation), **not** the canonical `reliability.assess.assess_information`. The comparator reimplementation (a) omits scenario/zone threshold multipliers (`comparator.py:161`), (b) aliases `coverage = 1.0 if not stale else 1-(age-45)/100` instead of `compute_coverage` (verified: fresh→1.0, stale@70s→0.75), and (c) never builds `build_conflict_graph`. `compute_coverage`/`build_conflict_graph` are exercised only by tests. **Fix:** route `/api/assessments` through `reliability.assess_information` with `zone_type_lookup`/`scenario_type`; delete the comparator reimplementation.
+
+6. **[CONTRACT] Mask & unit integrity.** A zone with **100% missing sensors** still emits default-substituted values with `channel_masks=[1,1,1,1,1,1]` (verified for `exit_1`) — applicability and missing-data semantics are conflated (pipeline.py:100-118, tree_bank.py:116). `TreeOutputRecord` schema stores `channel_names/values/masks` with **no `channel_units`**; `ForecastRecord` has **no applicability/missing-data mask** column. **Fix:** add `channel_units`/`applicability_mask`/`missing_data_mask`; derive masks from observation presence, not only zone type.
+
+7. **[EDGE] Central-source simulated forecast leaks future ground truth.** `central_source.py:91` blends `current_val` with `future_true_val` (the reference state at the forecast target time), unfairly advantaging Stream A in the A/B benchmark. **Fix:** smooth over received observations only.
+
