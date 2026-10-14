@@ -102,6 +102,7 @@ class TestFutureTimeExclusion:
         Observation with received_at > issue_time must NOT enter the U vector.
         This verifies the core data-leakage guard.
         """
+        from person4.event_horizon_p4.config import H_DIM
         zone_id   = MOCK_ZONE_IDS[0]
         issue_t   = _BASE
         future_t  = _BASE + timedelta(seconds=100)
@@ -110,7 +111,7 @@ class TestFutureTimeExclusion:
         future_obs = _make_obs(zone_id, "density", 99.0,
                                observed=future_t, received=future_t)
         # No tree out; zero H embedding
-        h_emb = np.zeros(8, dtype=np.float32)
+        h_emb = np.zeros(H_DIM, dtype=np.float32)
 
         u_vec = assemble_u_vec(zone_id, issue_t, [future_obs], None, h_emb)
         # X[0] (density) should be the default fallback (0.8), not 99.0
@@ -120,13 +121,14 @@ class TestFutureTimeExclusion:
         """
         Observation with received_at <= issue_time should populate the U vector.
         """
+        from person4.event_horizon_p4.config import H_DIM
         zone_id = MOCK_ZONE_IDS[0]
         issue_t = _BASE + timedelta(seconds=50)
         past_t  = _BASE + timedelta(seconds=10)
 
         past_obs = _make_obs(zone_id, "density", 3.5,
                              observed=past_t, received=past_t)
-        h_emb = np.zeros(8, dtype=np.float32)
+        h_emb = np.zeros(H_DIM, dtype=np.float32)
 
         u_vec = assemble_u_vec(zone_id, issue_t, [past_obs], None, h_emb)
         # density value (X[0]) should be 3.5
@@ -138,18 +140,18 @@ class TestFutureTimeExclusion:
         """
         Observation older than OBS_STALE_THRESHOLD_SEC (90 s) gets obs_mask = 0.
         """
-        from person4.event_horizon_p4.config import OBS_STALE_THRESHOLD_SEC, X_DIM, D_DIM, H_DIM, AGE_DIM
+        from person4.event_horizon_p4.config import OBS_STALE_THRESHOLD_SEC, X_DIM, H_DIM, AGE_DIM
         zone_id = MOCK_ZONE_IDS[0]
         issue_t = _BASE + timedelta(seconds=200)
         old_t   = _BASE   # 200 s ago — stale
 
         old_obs = _make_obs(zone_id, "density", 5.0,
                             observed=old_t, received=old_t)
-        h_emb = np.zeros(8, dtype=np.float32)
+        h_emb = np.zeros(H_DIM, dtype=np.float32)
 
         u_vec = assemble_u_vec(zone_id, issue_t, [old_obs], None, h_emb)
-        # obs_mask slice starts at X_DIM + D_DIM + H_DIM + AGE_DIM
-        obs_mask_start = X_DIM + D_DIM + H_DIM + AGE_DIM
+        # In layout [X(6), AGE(6), OBS_MASK(6), D(6), H(16)], obs_mask starts at X_DIM + AGE_DIM
+        obs_mask_start = X_DIM + AGE_DIM
         obs_mask_density = u_vec[obs_mask_start]
         assert obs_mask_density == 0.0, (
             f"Stale observation should set obs_mask=0, got {obs_mask_density}"

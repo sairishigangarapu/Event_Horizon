@@ -26,6 +26,7 @@ import numpy as np
 
 from .config import (
     D_DIM,
+    EXIT_ZONE_IDS,
     H_DIM,
     HISTORY_STEPS,
     HORIZONS_SEC,
@@ -36,17 +37,14 @@ from .config import (
     SAMPLE_INTERVAL_SEC,
     VAR_NAMES,
     VAR_UNITS,
+    VENUE_ZONE_IDS,
 )
 
 # ---------------------------------------------------------------------------
-# Zone definitions (mock)
+# Zone definitions (reconciled with Person 1 venue)
 # ---------------------------------------------------------------------------
 
-MOCK_ZONE_IDS: List[str] = [f"zone_{i:02d}" for i in range(NUM_MOCK_ZONES)]
-
-#: Which zones have an exit applicability mask = 1.
-EXIT_ZONE_IDS: List[str] = ["zone_04", "zone_05"]
-
+MOCK_ZONE_IDS: List[str] = list(VENUE_ZONE_IDS)
 
 def is_exit_zone(zone_id: str) -> bool:
     return zone_id in EXIT_ZONE_IDS
@@ -112,12 +110,12 @@ class MockScenario:
 # ---------------------------------------------------------------------------
 
 _TREE_CHANNEL_NAMES: List[str] = [
-    "est_density",
-    "est_speed",
-    "est_inflow",
-    "est_outflow",
-    "est_queue",
-    "est_exit_risk",
+    "estimated_density",
+    "estimated_speed",
+    "estimated_inflow",
+    "estimated_outflow",
+    "estimated_queue_length",
+    "probability_exit_open",
 ]
 
 assert len(_TREE_CHANNEL_NAMES) == D_DIM

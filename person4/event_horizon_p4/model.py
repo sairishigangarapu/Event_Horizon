@@ -25,6 +25,7 @@ import torch
 import torch.nn as nn
 
 from .config import (
+    H_DIM,
     HISTORY_STEPS,
     HORIZONS_SEC,
     NUM_CHANNELS,
@@ -161,6 +162,7 @@ class TemporalGRUForecaster(nn.Module):
             "num_layers":   self.num_layers,
             "num_horizons": self.num_horizons,
             "horizons_sec": self.horizons_sec,
+            "h_dim":        extra_meta.get("h_dim", H_DIM) if extra_meta else H_DIM,
             "version":      self.version,
             **(extra_meta or {}),
         }
@@ -176,7 +178,7 @@ class TemporalGRUForecaster(nn.Module):
             num_layers   = ckpt["num_layers"],
             num_horizons = ckpt["num_horizons"],
             horizons_sec = ckpt["horizons_sec"],
-            version      = ckpt.get("version", "gru_forecaster_v1_mock"),
+            version      = ckpt.get("version", "gru_forecaster_v1"),
         )
         model = cls(cfg)
         model.load_state_dict(ckpt["state_dict"])

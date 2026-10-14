@@ -14,9 +14,14 @@ from __future__ import annotations
 import pytest
 from datetime import datetime, timedelta, timezone
 
-from event_horizon_p4.comparison import ForecastComparator, summarise_comparison
-from event_horizon_p4.config import STREAM_A_ID, STREAM_B_ID, VAR_UNITS
-from event_horizon_p4.inference import ForecastRecord
+try:
+    from person4.event_horizon_p4.comparison import ForecastComparator, summarise_comparison
+    from person4.event_horizon_p4.config import STREAM_A_ID, STREAM_B_ID, VAR_UNITS
+    from person4.event_horizon_p4.inference import ForecastRecord
+except ImportError:
+    from event_horizon_p4.comparison import ForecastComparator, summarise_comparison
+    from event_horizon_p4.config import STREAM_A_ID, STREAM_B_ID, VAR_UNITS
+    from event_horizon_p4.inference import ForecastRecord
 
 
 # ---------------------------------------------------------------------------

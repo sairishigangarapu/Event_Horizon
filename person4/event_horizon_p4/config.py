@@ -57,16 +57,16 @@ NUM_NUMERIC_CHANNELS: int = NUM_CHANNELS - 1   # 5  (excludes exit_open)
 
 
 # ---------------------------------------------------------------------------
-# Temporal contract (mock defaults — tune only with justification)
+# Temporal contract (aligned with ArchitecturePipeline)
 # ---------------------------------------------------------------------------
 
-#: Sample interval in seconds.  Changing this invalidates stored history.
+#: Sample interval in seconds. Changing this invalidates stored history.
 SAMPLE_INTERVAL_SEC: int = 5
 
-#: Number of historical steps fed to the GRU.  5 s × 60 = 300 s look-back.
-HISTORY_STEPS: int = 60
+#: Number of historical steps fed to the GRU. Aligned with ArchitecturePipeline.lookback_steps (12 * 5 s = 60 s).
+HISTORY_STEPS: int = 12
 
-#: Prediction horizons in seconds.  Corresponding step offsets:
+#: Prediction horizons in seconds. Corresponding step offsets:
 #:   30 s → offset 6,  60 s → offset 12,  120 s → offset 24.
 HORIZONS_SEC: List[int] = [30, 60, 120]
 
@@ -75,18 +75,17 @@ HORIZON_OFFSETS: List[int] = [h // SAMPLE_INTERVAL_SEC for h in HORIZONS_SEC]
 
 
 # ---------------------------------------------------------------------------
-# Feature-vector dimensions (MOCK — reconcile with Persons 1–3)
+# Feature-vector dimensions (reconciled with Persons 1–3 on main)
 # ---------------------------------------------------------------------------
 
 #: Observation vector X: one value per channel.
 X_DIM: int = NUM_CHANNELS        # 6
 
 #: Decision-tree vector D: passed directly even though also in hypernetwork.
-D_DIM: int = 6                   # 6  (mock; should match Person 3 tree channels)
+D_DIM: int = 6                   # 6  (matches Person 2 DecisionTreeBank TREE_CHANNELS)
 
-#: Spatial GNN embedding H: MOCK.  Person 3 report notes 16-dim generated
-#: node values but final GNN output dim is not fixed in the workplan.
-H_DIM: int = 8                   # 8  MOCK
+#: Spatial GNN embedding H: 16-dim representation from Person 3's EdgeAwareGNN embed_dim.
+H_DIM: int = 16                  # 16 (verified from models/production/spatial config)
 
 #: Age features: one normalised age per observation channel.
 AGE_DIM: int = NUM_CHANNELS      # 6
@@ -94,32 +93,30 @@ AGE_DIM: int = NUM_CHANNELS      # 6
 #: Observation missing/stale masks: one per observation channel.
 OBS_MASK_DIM: int = NUM_CHANNELS # 6
 
-#: Tree applicability masks: one per tree channel.
+#: Tree applicability masks: one per tree channel (carried in dynamic spatial context).
 TREE_MASK_DIM: int = D_DIM       # 6
 
 #: Exit applicability flag (scalar mask): 1 for exit zones, 0 otherwise.
 EXIT_MASK_DIM: int = 1           # 1
 
-#: Total GRU input dimension U[z,t].
-U_DIM: int = (
-    X_DIM
-    + D_DIM
-    + H_DIM
-    + AGE_DIM
-    + OBS_MASK_DIM
-    + TREE_MASK_DIM
-    + EXIT_MASK_DIM
-)  # 39
+#: Total GRU input dimension U[z,t] in ArchitecturePipeline:
+#: [raw_values(6), norm_ages(6), obs_masks(6), tree_values(6), h_embeddings(16)] = 40.
+U_DIM: int = X_DIM + AGE_DIM + OBS_MASK_DIM + D_DIM + H_DIM  # 40
 
 # Sanity assertion baked in at import time.
-assert U_DIM == 39, f"U_DIM mismatch: expected 39, got {U_DIM}"
+assert U_DIM == 40, f"U_DIM mismatch: expected 40, got {U_DIM}"
 
 
 # ---------------------------------------------------------------------------
-# Mock zone count
+# Venue zone metadata (reconciled with Person 1 get_default_venue)
 # ---------------------------------------------------------------------------
 
-NUM_MOCK_ZONES: int = 6
+VENUE_ZONE_IDS: List[str] = [
+    "ent_a", "ent_b", "corridor_1", "corridor_2",
+    "concourse", "stair_1", "exit_1", "exit_2"
+]
+EXIT_ZONE_IDS: List[str] = ["exit_1", "exit_2"]
+NUM_MOCK_ZONES: int = len(VENUE_ZONE_IDS)  # 8 zones
 
 
 # ---------------------------------------------------------------------------
@@ -143,10 +140,10 @@ MISSING_AGE_SENTINEL: float = 999.0
 @dataclass
 class GRUConfig:
     """Hyper-parameters for the GRU temporal forecaster."""
-    input_dim: int = U_DIM      # 39
+    input_dim: int = U_DIM      # 40
     hidden_dim: int = 64
     num_layers: int = 2
-    dropout: float = 0.1        # only active when num_layers > 1
+    dropout: float = 0.1        # only active when num_layers > 1 and in training mode
     num_horizons: int = len(HORIZONS_SEC)
     horizons_sec: List[int] = field(default_factory=lambda: list(HORIZONS_SEC))
     version: str = "gru_forecaster_v1_mock"
@@ -174,9 +171,9 @@ class TrainConfig:
 # ---------------------------------------------------------------------------
 
 STREAM_B_ID: str = "stream_b_architecture"
-STREAM_A_ID: str = "stream_a_central_DEMO_FIXTURE"
+STREAM_A_ID: str = "stream_a_central"
 
-MODEL_VERSION: str = "gru_forecaster_v1_mock"
+MODEL_VERSION: str = "gru_forecaster_v1"
 
 
 # ---------------------------------------------------------------------------

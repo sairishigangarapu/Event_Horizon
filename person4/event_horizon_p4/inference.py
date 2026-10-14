@@ -102,7 +102,7 @@ class TemporalForecaster:
         model:         TemporalGRUForecaster,
         scaler_mean:   Optional[np.ndarray] = None,
         scaler_scale:  Optional[np.ndarray] = None,
-        model_version: str = "gru_forecaster_v1_mock",
+        model_version: str = "gru_forecaster_v1",
     ):
         self._model        = model
         self._model.eval()

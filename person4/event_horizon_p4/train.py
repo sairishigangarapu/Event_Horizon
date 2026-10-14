@@ -93,9 +93,9 @@ def _build_targets_for_batch(
     for z_idx, z_id in enumerate(batch.zone_ids):
         exit_mask[z_idx] = 1.0 if is_exit_zone(z_id) else 0.0
 
-        # obs_mask from last U vec (obs_mask slice starts at X+D+H+age = 26)
+        # obs_mask from last U vec (layout: X(6) + age(6) + obs_mask(6) + D(6) + H(16))
         last_u = batch.u_history[z_idx, -1, :]
-        obs_mask_start = 6 + 6 + 8 + 6  # X + D + H + age
+        obs_mask_start = 6 + 6  # X + age = 12
         obs_mask[z_idx] = last_u[obs_mask_start: obs_mask_start + NUM_NUMERIC_CHANNELS]
 
         for h_idx, h_sec in enumerate(HORIZONS_SEC):

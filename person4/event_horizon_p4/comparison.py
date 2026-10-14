@@ -88,6 +88,12 @@ class ComparisonReport:
 # Alignment key type
 # ---------------------------------------------------------------------------
 
+def _naive_dt(dt: datetime) -> datetime:
+    if dt.tzinfo is not None:
+        return dt.astimezone(timezone.utc).replace(tzinfo=None)
+    return dt
+
+
 _AlignKey = Tuple[str, str, str, datetime]  # (scenario_id, zone_id, variable, target_at)
 
 
@@ -132,7 +138,7 @@ class ForecastComparator:
         # Build lookup for Stream A: key → ForecastRecord
         a_lookup: Dict[_AlignKey, ForecastRecord] = {}
         for rec in a_filtered:
-            key = (rec.scenario_id, rec.zone_id, rec.variable, rec.target_at)
+            key = (rec.scenario_id, rec.zone_id, rec.variable, _naive_dt(rec.target_at))
             # Last-write wins for same key (deterministic)
             a_lookup[key] = rec
 
@@ -141,7 +147,7 @@ class ForecastComparator:
         unit_skipped: List[Tuple[str, str, str]] = []
 
         for b_rec in b_filtered:
-            key = (b_rec.scenario_id, b_rec.zone_id, b_rec.variable, b_rec.target_at)
+            key = (b_rec.scenario_id, b_rec.zone_id, b_rec.variable, _naive_dt(b_rec.target_at))
 
             if key not in a_lookup:
                 # Stream A did not provide this channel

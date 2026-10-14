@@ -18,11 +18,13 @@ Engineering rule:
 
 from __future__ import annotations
 
+import csv
+import os
 import random
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
-from typing import Dict, List, Optional
+from datetime import datetime, timedelta, timezone
+from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 
@@ -51,17 +53,21 @@ _FIXTURE_WARNING = (
 _FIXTURE_VERSION = "stream_a_demo_fixture_v1"
 
 
+def _parse_ts(ts_str: str) -> datetime:
+    if ts_str.endswith("Z"):
+        ts_str = ts_str[:-1] + "+00:00"
+    dt = datetime.fromisoformat(ts_str)
+    if dt.tzinfo is not None:
+        dt = dt.astimezone(timezone.utc).replace(tzinfo=None)
+    return dt
+
+
 class CentralDemoFixtureAdapter:
     """
-    Produces Stream A 'central' forecasts from mock visible data.
+    Produces Stream A 'central' forecasts from CSV fixture or calibrated visible data.
 
-    The fixture mimics a central provider by adding calibrated Gaussian noise
-    to the tree-history mean values.  This represents a provider that has seen
-    the same observable data but processes it independently.
-
-    Channels marked 'unavailable' are omitted and reported separately so that
-    comparison.py shows "unavailable" for those channels instead of a merged
-    or inflated trust score.
+    If a real Central CSV fixture exists (e.g. data/demo/central_forecast.csv),
+    records are read from it. Otherwise, it generates calibrated values with noise.
     """
 
     #: Variables this fixture "provides" (others show 'unavailable')
@@ -72,17 +78,42 @@ class CentralDemoFixtureAdapter:
         noise_std: float = 0.15,
         seed: int = 99,
         available_vars: Optional[List[str]] = None,
+        csv_path: Optional[str] = "data/demo/central_forecast.csv",
     ):
-        """
-        Args:
-            noise_std:      Gaussian noise standard deviation applied to
-                            tree-history means to simulate a separate provider.
-            seed:           RNG seed for reproducibility.
-            available_vars: Override the set of variables this fixture provides.
-        """
         self._noise_std      = noise_std
         self._rng            = random.Random(seed)
         self._available_vars = set(available_vars or self.AVAILABLE_VARS)
+        self._csv_records: List[ForecastRecord] = []
+        self._csv_path = csv_path
+
+        if csv_path and os.path.exists(csv_path):
+            self._load_csv(csv_path)
+
+    def _load_csv(self, path: str) -> None:
+        try:
+            with open(path, mode="r", encoding="utf-8") as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    issued_at = _parse_ts(row["issued_at"])
+                    received_at = _parse_ts(row["received_at"])
+                    target_at = _parse_ts(row["target_at"])
+                    h_sec = int(round((target_at - issued_at).total_seconds()))
+                    self._csv_records.append(ForecastRecord(
+                        forecast_id   = row["forecast_id"],
+                        stream_id     = row.get("stream_id", STREAM_A_ID),
+                        scenario_id   = row["scenario_id"],
+                        zone_id       = row["zone_id"],
+                        variable      = row["variable"],
+                        unit          = row["unit"],
+                        issued_at     = issued_at,
+                        received_at   = received_at,
+                        target_at     = target_at,
+                        value         = float(row["value"]),
+                        model_version = row.get("model_or_provider_version", _FIXTURE_VERSION),
+                        horizon_sec   = h_sec,
+                    ))
+        except Exception:
+            self._csv_records = []
 
     def forecast(
         self,
@@ -105,6 +136,17 @@ class CentralDemoFixtureAdapter:
         """
         records: List[ForecastRecord] = []
         issue_time = batch.issue_time
+
+        if self._csv_records:
+            matching = [
+                r for r in self._csv_records
+                if r.scenario_id == scenario_id
+                and r.zone_id in batch.zone_ids
+                and r.received_at <= issue_time
+                and r.target_at in batch.target_times.values()
+            ]
+            if matching:
+                return matching
 
         for z_idx, zone_id in enumerate(batch.zone_ids):
             # Use tree-history X slice (channels 0-5) as the "observable"

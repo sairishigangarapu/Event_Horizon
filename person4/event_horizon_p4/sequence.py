@@ -18,7 +18,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 
@@ -180,40 +180,37 @@ def _build_exit_mask(zone_id: str) -> np.ndarray:
 def assemble_u_vec(
     zone_id: str,
     issue_time: datetime,
-    observations: List[MockObservation],
-    tree_out: Optional[MockTreeOutput],
+    observations: List[Any],
+    tree_out: Optional[Any],
     h_embedding: np.ndarray,
 ) -> np.ndarray:
     """
     Assembles the full U[z,t] feature vector.
 
-    Layout:
-        X(6) | D(6) | H(8) | age(6) | obs_mask(6) | tree_mask(6) | exit_mask(1)
-      = 39 dimensions.
+    Production layout (aligned with ArchitecturePipeline):
+        raw_values(6) | norm_ages(6) | obs_masks(6) | tree_values D(6) | spatial H(16)
+      = 40 dimensions.
 
     Args:
         zone_id:     Zone identifier.
         issue_time:  The forecast issue time (no future data allowed).
         observations: All available observations (will be filtered by received_at).
         tree_out:    Decision-tree output at or before issue_time (may be None).
-        h_embedding: Spatial GNN embedding H[z,t] of shape (H_DIM,).
+        h_embedding: Spatial GNN embedding H[z,t] of shape (H_DIM=16,).
 
     Returns:
-        u_vec of shape (U_DIM,) = (39,).
+        u_vec of shape (U_DIM,) = (40,).
     """
     x_vec, age_vec, obs_mask = _build_x_and_masks(zone_id, issue_time, observations)
-    d_vec, tree_mask          = _build_d_and_tree_mask(tree_out, zone_id)
-    exit_mask                 = _build_exit_mask(zone_id)
+    d_vec, _                 = _build_d_and_tree_mask(tree_out, zone_id)
 
     u_vec = np.concatenate([
-        x_vec,      # 6
-        d_vec,      # 6
-        h_embedding,# 8
-        age_vec,    # 6
-        obs_mask,   # 6
-        tree_mask,  # 6
-        exit_mask,  # 1
-    ]).astype(np.float32)  # 39
+        x_vec,        # 6: raw observation values
+        age_vec,      # 6: normalized observation ages
+        obs_mask,     # 6: freshness masks
+        d_vec,        # 6: direct tree channels D (P0 invariant)
+        h_embedding,  # 16: spatial GNN embedding H
+    ]).astype(np.float32)  # 40
 
     assert u_vec.shape == (U_DIM,), (
         f"U_DIM mismatch: expected ({U_DIM},), got {u_vec.shape}"

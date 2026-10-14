@@ -18,7 +18,7 @@ from __future__ import annotations
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 
@@ -98,15 +98,15 @@ def _as_naive(dt: datetime) -> datetime:
 
 
 def build_reference_lookup(
-    reference_states: List[MockReferenceState],
-) -> Dict[Tuple[str, str, str, datetime], MockReferenceState]:
+    reference_states: List[Any],
+) -> Dict[Tuple[str, str, str, datetime], Any]:
     """
     Builds a lookup dictionary keyed by:
         (scenario_id, zone_id, variable, state_at)
 
     This allows O(1) matching from ForecastRecord.target_at == state_at.
     """
-    lookup: Dict[Tuple[str, str, str, datetime], MockReferenceState] = {}
+    lookup: Dict[Tuple[str, str, str, datetime], Any] = {}
     for ref in reference_states:
         key = (
             ref.scenario_id,
@@ -133,7 +133,7 @@ class ReferenceEvaluator:
     def score(
         self,
         forecasts:        List[ForecastRecord],
-        reference_states: List[MockReferenceState],
+        reference_states: List[Any],
         evaluation_time:  Optional[datetime] = None,
     ) -> EvaluationReport:
         """

@@ -75,8 +75,17 @@ def first_batch(scenario, assembler):
 # ---------------------------------------------------------------------------
 
 class TestUVectorShape:
-    def test_u_dim_constant_matches_39(self):
-        assert U_DIM == 39
+    def test_u_dim_constant_matches_40(self):
+        assert U_DIM == 40
+
+    def test_inference_determinism(self):
+        model = TemporalGRUForecaster()
+        model.eval()
+        dummy_input = torch.randn(NUM_MOCK_ZONES, HISTORY_STEPS, U_DIM)
+        with torch.no_grad():
+            out1 = model(dummy_input)
+            out2 = model(dummy_input)
+        assert torch.allclose(out1, out2), "Inference must be strictly deterministic (eval mode disables dropout)"
 
     def test_assembled_u_vec_has_correct_dim(self, scenario):
         zone_id = MOCK_ZONE_IDS[0]

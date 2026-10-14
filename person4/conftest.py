@@ -14,6 +14,9 @@ import pathlib
 
 # Resolve person4/ (the directory containing this conftest.py)
 _PERSON4_ROOT = pathlib.Path(__file__).parent.resolve()
+_REPO_ROOT = _PERSON4_ROOT.parent
 
 if str(_PERSON4_ROOT) not in sys.path:
     sys.path.insert(0, str(_PERSON4_ROOT))
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))

@@ -27,30 +27,28 @@ This package implements Person 4's responsibilities from the **Event Horizon 5-P
 
 ---
 
-## Mock Contract
+## Production Contract
 
 | Parameter | Value | Note |
 |---|---|---|
 | Sample interval | 5 s | Fixed — changing invalidates stored history |
-| History window | 60 steps | 5 s × 60 = 300 s look-back |
+| History window | 12 steps | 5 s × 12 = 60 s look-back (aligned with ArchitecturePipeline) |
 | Horizons | 30 s / 60 s / 120 s | Offsets: 6, 12, 24 steps |
-| Zones (mock) | 6 | Reconcile with Person 1 venue map |
+| Venue Zones | 8 | `ent_a, ent_b, corridor_1, corridor_2, concourse, stair_1, exit_1, exit_2` |
 | Observation channels X | 6 | `density, speed, inflow, outflow, queue_length, exit_open` |
-| Tree vector D | 6 | Must match Person 3 tree output channels |
-| Spatial embedding H | **8 (MOCK)** | Final GNN output dim not fixed in workplan |
+| Tree vector D | 6 | Matches Person 2 DecisionTreeBank TREE_CHANNELS |
+| Spatial embedding H | **16** | Reconciled with Person 3 EdgeAwareGNN embed_dim |
 | Age features | 6 | One normalised age per observation channel |
 | Observation masks | 6 | 1 = fresh (< 90 s), 0 = stale / missing |
-| Tree masks | 6 | 1 = applicable, 0 = inapplicable |
-| Exit mask | 1 | 1 for exit zones, 0 otherwise |
-| **Total U_DIM** | **39** | Asserted at import time |
+| **Total U_DIM** | **40** | Aligned with ArchitecturePipeline.u_dim |
 
 ---
 
 ## GRU Input Layout (U[z,t])
 
 ```
-index:  0     5 | 6    11 | 12   19 | 20   25 | 26   31 | 32   37 | 38
-        X (6)   | D (6)   | H (8)   | age (6) | obs_m(6)| tree_m(6)| exit_m(1)
+index:  0     5 | 6    11 | 12   17 | 18   23 | 24       39
+        raw X(6)| age (6) | obs_m(6)| D (6)   | spatial H (16)
 ```
 
 **Key rules**:
