@@ -1,8 +1,8 @@
 {
-  "pipeline_version": "v1.0.0",
+  "pipeline_version": "v1.1.0",
   "tree_version": "dt_bank_v1",
-  "hypernet_version": "hypernet_v1",
-  "gnn_version": "gnn_edge_v1",
+  "hypernet_version": "hypernet_v2",
+  "gnn_version": "gnn_edge_v2",
   "temporal_version": "gru_forecaster_v1",
   "scaler_version": "standard_scaler_v1",
   "schema_version": "v1.0",
@@ -11,9 +11,16 @@
   "is_active": true,
   "model_hashes": {
     "tree_bank.joblib": "b1045036b00ecf75e07d16146b58907ba603ef4f9346b45eafe6cc377cf59155",
-    "hypernet.pt": "cc3a7b68006bd77173143af1d4fdcccc32c2e838ff1fd57a6412a5e8452501b4",
-    "gnn.pt": "7ed2cda3e8091d242df7677b942755fc91072c92097dbdac69c44e4f45ff867b",
-    "temporal_model.pt": "a5cd117649bd20590fcca5db19395bfe93fc486ebfce1b137c8cffbc0b4bf841"
+    "temporal_model.pt": "a5cd117649bd20590fcca5db19395bfe93fc486ebfce1b137c8cffbc0b4bf841",
+    "spatial/hypernet_v2__gnn_edge_v2__6675c91e/hypernet.pt": "147385d22078cedee4188cff90cda4e24dd56a9d49b3cc3f34234f4c3e9b6981",
+    "spatial/hypernet_v2__gnn_edge_v2__6675c91e/gnn.pt": "629e17ac2ee653a2b841b0da0c8830b00fa8d84543dc98aa5f70319baf65d714"
   },
-  "metrics_summary": null
+  "metrics_summary": null,
+  "training_status": {
+    "hypernet": "untrained_initial",
+    "gnn": "untrained_initial",
+    "temporal": "untrained_initial",
+    "tree_bank": "fitted_unvalidated"
+  },
+  "spatial_artifact_dir": "spatial/hypernet_v2__gnn_edge_v2__6675c91e"
 }
