@@ -52,7 +52,7 @@ flowchart TD
     SIM --> TRUTH["Reference state archive"]
     EXT["Central-source forecast feed"] --> ADAPTER["Central forecast adapter"]
 
-    subgraph PATH["Architecture forecast"]
+    subgraph PATH[Architecture forecast]
         OBS --> DT["Decision-tree bank: separate output channels"]
         OBS --> GRAPH["Observed spatial graph"]
         DT --> GRAPH
