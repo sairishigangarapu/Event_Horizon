@@ -1,0 +1,32 @@
+{
+  "estimated_density": {
+    "mae": 0.0307,
+    "rmse": 0.0355,
+    "count": 32
+  },
+  "estimated_speed": {
+    "mae": 0.4455,
+    "rmse": 0.472,
+    "count": 32
+  },
+  "estimated_inflow": {
+    "mae": 0.363,
+    "rmse": 0.4498,
+    "count": 32
+  },
+  "estimated_outflow": {
+    "mae": 0.3834,
+    "rmse": 0.5038,
+    "count": 32
+  },
+  "estimated_queue_length": {
+    "mae": 0.2183,
+    "rmse": 0.3296,
+    "count": 32
+  },
+  "probability_exit_open": {
+    "accuracy": 1.0,
+    "brier_score": 0.0,
+    "count": 4
+  }
+}

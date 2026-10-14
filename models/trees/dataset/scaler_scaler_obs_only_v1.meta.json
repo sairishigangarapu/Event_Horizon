@@ -1,0 +1,40 @@
+{
+  "scaler_version": "scaler_obs_only_v1",
+  "feature_schema_version": "obs_only_v1",
+  "feature_names": [
+    "density_value",
+    "speed_value",
+    "inflow_value",
+    "outflow_value",
+    "queue_length_value",
+    "exit_open_value",
+    "density_age_norm",
+    "speed_age_norm",
+    "inflow_age_norm",
+    "outflow_age_norm",
+    "queue_length_age_norm",
+    "exit_open_age_norm",
+    "density_observed",
+    "speed_observed",
+    "inflow_observed",
+    "outflow_observed",
+    "queue_length_observed",
+    "exit_open_observed"
+  ],
+  "fit_scenario_ids": [
+    "bottleneck_000",
+    "bottleneck_001",
+    "counterflow_002",
+    "counterflow_003",
+    "evacuation_000",
+    "evacuation_001",
+    "gradual_congestion_000",
+    "gradual_congestion_002",
+    "normal_flow_001",
+    "normal_flow_003",
+    "sudden_stop_002",
+    "sudden_stop_003"
+  ],
+  "fit_cutoff": "2026-10-14T10:00:45",
+  "fitted": true
+}

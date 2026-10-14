@@ -1,5 +1,6 @@
 import os
 import sys
+import json
 import argparse
 from datetime import datetime, timezone, timedelta
 from typing import List, Dict, Any
@@ -28,11 +29,13 @@ from crowd_reliability.ml.tree_train import (
     train_tree_bank,
 )
 from crowd_reliability.ml.trees import TreeSnapshot, TreeVectorResult, infer_tree_vector
+from crowd_reliability.dataset.adapter import ingest_dataset, load_split_scenarios, load_zone_flags
 from crowd_reliability.services.central_source import CentralSourceAdapter
 from crowd_reliability.services.comparator import ForecastComparator
 from crowd_reliability.services.evaluator import EvaluationService
 
 DEFAULT_TREE_ARTIFACT_DIR = "./models/trees"
+DATASET_DIR = "./data/dataset"
 
 def cmd_db_init():
     """Initializes SQLite database and populates venue layout."""
@@ -443,6 +446,91 @@ def cmd_benchmark_trees(preds: str = os.path.join(DEFAULT_TREE_ARTIFACT_DIR, "mc
     _print_channel_metrics(metrics)
 
 
+def cmd_dataset_ingest(dataset_dir: str = DATASET_DIR, grid_cols: int = 8, grid_rows: int = 4,
+                       exit_boundary: str = "bottom", force: bool = False):
+    """Ingests the Event_Horizon dataset into the DB as zones + observations + reference states."""
+    print(f"[dataset-ingest] Ingesting {dataset_dir} (grid {grid_cols}x{grid_rows}, exits={exit_boundary})")
+    cmd_db_init()
+    db = SessionLocal()
+    try:
+        summary = ingest_dataset(
+            dataset_dir, db, grid_cols=grid_cols, grid_rows=grid_rows,
+            exit_boundary=exit_boundary, clear_existing=force,
+        )
+    finally:
+        db.close()
+    print(f"[dataset-ingest] Zones: {summary['n_zones']} | "
+          f"scenarios train/val/test = "
+          f"{len(summary['scenarios']['train'])}/{len(summary['scenarios']['val'])}/{len(summary['scenarios']['test'])}")
+    print(f"[dataset-ingest] Wrote {summary['zones_json']} and {summary['split_manifest']}")
+
+
+def cmd_dataset_train(zones_json: str, split_manifest: str, seed: int = 42,
+                      out_dir: str = os.path.join(DEFAULT_TREE_ARTIFACT_DIR, "dataset"),
+                      export_sample: str = "./data/demo/dataset_tree_vector_sample.json"):
+    """Trains the tree bank on dataset train scenarios; benchmarks a test scenario and exports a D vector."""
+    if not os.path.exists(zones_json) or not os.path.exists(split_manifest):
+        print(f"[dataset-train] Missing {zones_json} or {split_manifest}. Run 'dataset-ingest' first.")
+        return
+    zone_flags = load_zone_flags(zones_json)
+    with open(split_manifest) as f:
+        splits = json.load(f)
+    train_ids = splits["train"]
+    test_ids = splits["test"]
+
+    print(f"[dataset-train] Train scenarios: {len(train_ids)} | Test scenarios: {len(test_ids)} (seed={seed})")
+    db = SessionLocal()
+    try:
+        all_obs = db.query(ObservationRecord).filter(
+            ObservationRecord.scenario_id.in_(train_ids + test_ids)
+        ).all()
+        all_refs = db.query(ReferenceStateRecord).filter(
+            ReferenceStateRecord.scenario_id.in_(train_ids + test_ids)
+        ).all()
+    finally:
+        db.close()
+    if not all_refs:
+        print("[dataset-train] No reference states found for those scenarios. Run 'dataset-ingest' first.")
+        return
+
+    train_obs = [o for o in all_obs if o.scenario_id in train_ids]
+    train_refs = [r for r in all_refs if r.scenario_id in train_ids]
+    test_obs = [o for o in all_obs if o.scenario_id in test_ids]
+    test_refs = [r for r in all_refs if r.scenario_id in test_ids]
+
+    train_cutoff = max(r.label_available_at for r in train_refs)
+    bank, scaler, meta = train_tree_bank(
+        train_obs, train_refs, zone_flags, seed=seed, training_cutoff=train_cutoff,
+    )
+    meta["train_scenario_ids"] = train_ids
+    meta["test_scenario_ids"] = test_ids
+    paths = save_training_artifacts(bank, scaler, meta, out_dir)
+    print(f"[dataset-train] Artifacts: {paths['tree_bank']}, {paths['scaler']}")
+
+    eval_times = sorted({r.state_at for r in test_refs})[::3]
+    rows = predict_scenario_vectors(bank, test_obs, zone_flags, test_ids[0], eval_times,
+                                    zone_ids=sorted(zone_flags.keys()))
+    metrics = benchmark_channels(rows, test_refs)
+    print("\n=== Dataset per-channel benchmark (test scenario: {}) ===".format(test_ids[0]))
+    _print_channel_metrics(metrics)
+    with open(os.path.join(out_dir, "dataset_benchmark.json"), "w") as f:
+        json.dump(metrics, f, indent=2)
+
+    # Export one D[z,t] sample vector (Persons 3 & 4)
+    sample_obs = [o for o in test_obs if o.scenario_id == test_ids[0]]
+    if sample_obs:
+        eval_time = max(o.received_at for o in sample_obs)
+        result = infer_tree_vector(TreeSnapshot(
+            scenario_id=test_ids[0], as_of_time=eval_time,
+            observations=sample_obs, zone_ids=sorted(zone_flags.keys()),
+            zone_exit_flags=zone_flags,
+        ), bank)
+        os.makedirs(os.path.dirname(export_sample) or ".", exist_ok=True)
+        with open(export_sample, "w") as f:
+            f.write(result.to_json())
+        print(f"[dataset-train] Export sample D vector -> {export_sample}")
+
+
 def main():
     parser = argparse.ArgumentParser(description="Crowd Reliability CLI")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -489,6 +577,26 @@ def main():
     p_bt.add_argument("--preds", type=str, default=os.path.join(DEFAULT_TREE_ARTIFACT_DIR, "mc", "oos_predictions.jsonl"))
     p_bt.add_argument("--refs", type=str, default=os.path.join(DEFAULT_TREE_ARTIFACT_DIR, "mc", "mc_references.jsonl"))
 
+    # dataset-ingest
+    p_ing = subparsers.add_parser("dataset-ingest", help="Ingest the Event_Horizon dataset into the DB")
+    p_ing.add_argument("--dataset-dir", type=str, default=DATASET_DIR, help="Dataset root dir")
+    p_ing.add_argument("--grid-cols", type=int, default=8, help="Zone grid columns (longitudinal)")
+    p_ing.add_argument("--grid-rows", type=int, default=1, help="Zone grid rows (lateral; 1 = full cross-section)")
+    p_ing.add_argument("--exit-boundary", type=str, default="last_col",
+                       choices=["last_col", "last_row", "bottom", "top", "left", "right"],
+                       help="Which cells are exit zones")
+    p_ing.add_argument("--force", action="store_true", help="Re-ingest even if grid zones already exist")
+
+    # dataset-train
+    p_dt = subparsers.add_parser("dataset-train", help="Train + benchmark trees on the ingested dataset")
+    p_dt.add_argument("--zones-json", type=str, default=os.path.join(DATASET_DIR, "grid_zones.json"))
+    p_dt.add_argument("--splits", type=str, default=os.path.join(DATASET_DIR, "splits.json"))
+    p_dt.add_argument("--seed", type=int, default=42, help="Random seed")
+    p_dt.add_argument("--out", type=str, default=os.path.join(DEFAULT_TREE_ARTIFACT_DIR, "dataset"),
+                      help="Artifact output dir")
+    p_dt.add_argument("--export-sample", type=str, default="./data/demo/dataset_tree_vector_sample.json",
+                      help="Path for the sample D[z,t] export")
+
     args = parser.parse_args()
 
     if args.command == "db-init":
@@ -509,6 +617,17 @@ def main():
                               max_eval_times=args.max_eval_times)
     elif args.command == "benchmark-trees":
         cmd_benchmark_trees(preds=args.preds, refs=args.refs)
+    elif args.command == "dataset-ingest":
+        cmd_dataset_ingest(
+            dataset_dir=args.dataset_dir, grid_cols=args.grid_cols,
+            grid_rows=args.grid_rows, exit_boundary=args.exit_boundary,
+            force=args.force,
+        )
+    elif args.command == "dataset-train":
+        cmd_dataset_train(
+            zones_json=args.zones_json, split_manifest=args.splits,
+            seed=args.seed, out_dir=args.out, export_sample=args.export_sample,
+        )
 
 if __name__ == "__main__":
     main()
