@@ -153,3 +153,76 @@ Two candidate next steps, both pending sign-off:
 2. Train a stronger spatial model, alone or jointly with Person 4's GRU.
 
 Joint training is blocked on H3 (out-of-sample trees) and should follow H1 and H2.
+---
+
+This actually clarifies your remaining work quite a bit. The queue-length issue is now better understood, and Person 2's changes may remove one of the blockers to proper spatial-model training. Neither finding requires you to redesign the architecture immediately.
+
+## 1. Queue-length regression: what the findings mean
+
+The important distinction is between where the graph hurts and where both models fail.
+
+| Finding                                                    | Interpretation                                                                                    |
+| ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| Graph model leaks small queues into zones that never queue | Spatial message passing spreads queue-related signals into zones where they are inappropriate.    |
+| At `exit_1`, graph and no-graph are tied                   | The graph currently offers no demonstrated advantage at the zone where the real queue forms.      |
+| Both models underpredict queues during closures            | This is a shared forecasting failure, not a regression caused exclusively by the GNN.             |
+| Bias grows from roughly −10 to −30 persons                 | The models increasingly underestimate queue buildup at longer horizons.                           |
+| At 5 seconds, both barely beat persistence                 | The learned predictions offer little improvement over simply repeating the latest observed queue. |
+
+The result is that queue prediction needs a targeted modelling improvement, but replacing the graph architecture is not yet justified.
+
+Your three proposed directions are reasonable experiments:
+
+- Weight the queue loss toward exit zones. This makes errors in the zones where queues actually form contribute more to training. The risk is overfitting to `exit_1` or neglecting queues elsewhere if future layouts introduce them.
+- Add zone type to the prediction head. This gives the head explicit information about whether a zone is an exit, concourse or another zone type, rather than expecting it to infer that entirely from the learned representation.
+- Predict queue growth directly. Instead of predicting only the future queue \\(Q\_{t+h}\\), predict its change relative to the current queue: \\(\Delta Q = Q\_{t+h}-Q_t\\). This may make the target easier to learn, although the model must still capture queue growth during closures.
+
+I would test these as separate ablations, starting with the zone-type input and direct queue-growth prediction. Keep the original model as the control, use the same splits and seeds, and evaluate queue-active zones separately from zones whose queue is always zero.
+
+## 2. Person 2's changes: what they unblock
+
+The key distinction is between producing out-of-sample tree predictions and actually using them in your spatial pipeline.
+
+Person 2's new output
+
+`dt_bank_v2` + Monte Carlo refits + out-of-sample predictions
+
+Handoff H3: verify the contract
+
+Which predictions are out of sample? How are they aligned with scenarios, timestamps and zones?
+
+Spatial pipeline
+
+Currently uses `dt_bank_v1`, so the new output is not yet consumed.
+
+Person 2's work potentially solves the in-sample prediction problem, but we should confirm exactly what the new predictions cover before marking H3 complete.
+
+You should ask Person 2 to clarify:
+
+1. Are the OOS predictions generated for every relevant scenario, zone, timestamp and tree feature?
+2. Are predictions produced without training on the scenario or target being evaluated? What is the Monte Carlo refit and holdout procedure?
+3. Are the outputs aligned with the six channels in your spatial feature schema, including masks and missing values?
+4. Is there a supported way for the pipeline to load `dt_bank_v2` and consume `oos_predictions.jsonl`, or are those currently separate experimental artifacts?
+
+Until that is established and integrated, keep the H3 note open. Having the new files in the repository does not mean your pipeline is using them.
+
+## 3. What this means for your workload
+
+I would update your status as follows:
+
+| Item                                          | Status                                                       |
+| --------------------------------------------- | ------------------------------------------------------------ |
+| Spatial architecture and pipeline integration | Complete                                                     |
+| Initial graph/no-graph experiment             | Complete                                                     |
+| Queue-length failure analysis                 | Initial diagnosis complete; improvement experiments pending  |
+| H3 tree handoff                               | Potentially unblocked; awaiting confirmation and integration |
+| End-to-end training with Person 4             | Still pending                                                |
+| Production-quality forecasting claims         | Not yet supported                                            |
+
+My recommendation: don't start by changing your architecture. First, resolve H3 with Person 2. If the new OOS predictions meet the required contract, integrate them through the agreed interface and rerun the spatial experiment with leakage-safe features. Then test the queue-specific changes.
+
+That order matters: otherwise, you could spend time tuning a spatial model using tree features that are later replaced, making the experiment difficult to interpret.
+
+Your engineering deliverable remains largely complete. The remaining work is now a bounded sequence of data-handoff verification, controlled experiments and joint forecasting validation—not an open-ended instruction to keep adding complexity.
+
+---
