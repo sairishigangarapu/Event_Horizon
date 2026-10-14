@@ -379,6 +379,74 @@ def cmd_spatial_init(dry_run: bool = False, seed: int = 0):
         raise
     print(f"[spatial-init] Active spatial pair: {rel_dir} (untrained initial weights).")
 
+def cmd_export_spatial_sample(scenario: str = "bottleneck_exit_closure", seed: int = 42, as_of_second: int = 150,
+                              out: str = "./data/demo/spatial_output_sample.json"):
+    """
+    Exports one spatial inference sample (H, Vn, Ve, D, contract, versions) for a known
+    scenario and time, using the ACTIVE production artifacts. Inputs are observations
+    received by as_of only; the simulator's reference states are used solely to generate
+    those observations and are never passed to inference.
+    """
+    import json as _json
+    import torch
+    from crowd_reliability.ml.spatial import spatial_contract
+    from crowd_reliability.ml.tree_bank import TREE_CHANNELS as _CHANNELS
+
+    venue = get_default_venue()
+    cfg = SCENARIO_PRESETS[scenario].model_copy(update={"seed": seed})
+    refs, _ = CrowdSimulator(venue=venue, seed=seed).run_simulation(cfg)
+    observations = ObservationGenerator(seed=seed).generate_observations(refs, cfg)
+    start = min(r.state_at for r in refs)
+    as_of = start + timedelta(seconds=as_of_second)
+    del refs  # inference below receives observations only
+
+    pipeline = ArchitecturePipeline(venue=venue)
+    pipeline.load_pipeline(settings.model_dir)
+    spatial_out, zone_inputs = pipeline.spatial_snapshot(as_of, observations)
+    used = [o for o in observations if o.received_at <= as_of]
+
+    # Evidence that H is computed from the generated node/edge values
+    gnn = pipeline.gnn
+    with torch.no_grad():
+        vn, ve = torch.from_numpy(spatial_out.Vn), torch.from_numpy(spatial_out.Ve)
+        ei = pipeline.graph_builder.edge_index
+        h_recomputed = gnn(vn, ei, ve).numpy()
+        h_without_edge_values = gnn(vn, ei, torch.zeros_like(ve)).numpy()
+        h_shuffled_node_values = gnn(vn[torch.roll(torch.arange(vn.size(0)), 1)], ei, ve).numpy()
+
+    sample = {
+        "description": "Spatial inference sample from the active production hypernetwork+GNN pair",
+        "scenario": {"scenario_id": scenario, "seed": seed, "simulator": "crowd_reliability.simulation.CrowdSimulator",
+                     "as_of": as_of.isoformat(), "as_of_second": as_of_second},
+        "inputs": {"observations_received_by_as_of": len(used), "observations_total_generated": len(observations),
+                   "latest_received_at_used": max(o.received_at for o in used).isoformat() if used else None},
+        "tree_vector": {"channel_names": list(_CHANNELS),
+                        "values": dict(zip(spatial_out.zone_ids, zone_inputs["tree_values"])),
+                        "masks": dict(zip(spatial_out.zone_ids, zone_inputs["tree_masks"])),
+                        "tree_version": pipeline.manifest.tree_version},
+        "spatial_output": spatial_out.to_dict(),
+        "contract": spatial_contract(pipeline.spatial),
+        "manifest": {"pipeline_version": pipeline.manifest.pipeline_version,
+                     "spatial_artifact_dir": pipeline.manifest.spatial_artifact_dir,
+                     "training_status": pipeline.manifest.training_status},
+        "evidence": {
+            "max_abs_diff_H_vs_gnn(Vn,Ve)": float(abs(h_recomputed - spatial_out.H).max()),
+            "max_abs_change_H_when_Ve_zeroed": float(abs(h_without_edge_values - spatial_out.H).max()),
+            "max_abs_change_H_when_Vn_rows_permuted": float(abs(h_shuffled_node_values - spatial_out.H).max()),
+            "min_Ve": float(spatial_out.Ve.min()),
+            "temporal_input_dim": pipeline.temporal_model.input_dim,
+            "temporal_input_dim_expected": 24 + spatial_contract(pipeline.spatial)["h_dim"],
+        },
+        "warning": "Hypernetwork, GNN and temporal weights are untrained initial weights; values demonstrate the "
+                   "interface and data flow only, not learned spatial meaning.",
+    }
+    os.makedirs(os.path.dirname(out) or ".", exist_ok=True)
+    with open(out, "w", encoding="utf-8", newline="\n") as f:
+        _json.dump(sample, f, indent=2)
+    print(f"[export-spatial-sample] Wrote {out}: H{list(spatial_out.H.shape)} Vn{list(spatial_out.Vn.shape)} "
+          f"Ve{list(spatial_out.Ve.shape)} at {as_of.isoformat()} ({len(used)} observations used)")
+    return sample
+
 def _print_channel_metrics(metrics: Dict[str, Dict[str, Any]]):
     print(f"\n{'Channel':<26} | {'MAE':<10} | {'RMSE':<10} | {'Acc':<8} | {'Brier':<8} | {'N':<6}")
     print("-" * 82)
@@ -649,6 +717,14 @@ def main():
     p_sp = subparsers.add_parser("spatial-init", help="Create an untrained hypernetwork+GNN pair and switch the manifest to it")
     p_sp.add_argument("--dry-run", action="store_true", help="Print the planned change without writing")
     p_sp.add_argument("--seed", type=int, default=0, help="Weight initialization seed")
+
+    # export-spatial-sample
+    p_ss = subparsers.add_parser("export-spatial-sample", help="Export a spatial inference sample (H, Vn, Ve, contract) for Person 4")
+    p_ss.add_argument("--scenario", type=str, default="bottleneck_exit_closure", choices=sorted(SCENARIO_PRESETS))
+    p_ss.add_argument("--seed", type=int, default=42, help="Simulation seed")
+    p_ss.add_argument("--as-of-second", type=int, default=150, help="Evaluation time in seconds after scenario start")
+    p_ss.add_argument("--out", type=str, default="./data/demo/spatial_output_sample.json", help="Output JSON path")
+
     # train-trees
     p_tt = subparsers.add_parser("train-trees", help="Fit versioned scaler + tree bank (labels: reference state only)")
     p_tt.add_argument("--train", type=str, default=None, help="Comma-separated training scenario ids")
@@ -707,6 +783,9 @@ def main():
         cmd_evaluate(split=args.split)
     elif args.command == "spatial-init":
         cmd_spatial_init(dry_run=args.dry_run, seed=args.seed)
+    elif args.command == "export-spatial-sample":
+        cmd_export_spatial_sample(scenario=args.scenario, seed=args.seed,
+                                  as_of_second=args.as_of_second, out=args.out)
     elif args.command == "train-trees":
         cmd_train_trees(train=args.train, test=args.test, seed=args.seed,
                         out_dir=args.out, max_samples=args.max_samples)

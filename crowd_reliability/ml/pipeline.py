@@ -13,7 +13,7 @@ from crowd_reliability.models.schema import (
 from crowd_reliability.models.manifest import PipelineManifest
 from crowd_reliability.ml.tree_bank import DecisionTreeBank, TREE_CHANNELS
 from crowd_reliability.ml.graph import SpatialGraphBuilder
-from crowd_reliability.ml.spatial import SpatialEncoder, stack_zone_features, write_spatial_artifact
+from crowd_reliability.ml.spatial import SpatialEncoder, SpatialOutput, stack_zone_features, write_spatial_artifact
 from crowd_reliability.ml.temporal import MultivariateTemporalForecaster, TARGET_VAR_NAMES
 from crowd_reliability.simulation.scenarios import VenueLayout, get_default_venue
 
@@ -141,6 +141,52 @@ class ArchitecturePipeline:
         norm_ages = np.clip(ages_sec / 120.0, 0.0, 1.0)
         return raw_values, norm_ages, obs_masks
 
+    def _zone_inputs(self, as_of_time: datetime, recent_observations: List[ObservationRecord]) -> Dict[str, Any]:
+        """
+        Per-zone inputs at as_of_time, built from observations received by then:
+        the decision-tree vector D[z,t] with masks, the spatial encoder's detailed features,
+        and the 24 non-spatial U features [raw (6), norm_ages (6), obs_masks (6), D (6)].
+        """
+        tree_values: List[List[float]] = []
+        tree_masks: List[List[int]] = []
+        u_features: List[np.ndarray] = []
+        detailed_list: List[Dict[str, np.ndarray]] = []
+
+        for z_data in self.venue.zones:
+            detailed = self.extract_zone_features_detailed(z_data["zone_id"], as_of_time, recent_observations)
+            detailed_list.append(detailed)
+            raw_vals, norm_ages, obs_masks = self._legacy_zone_features(detailed)
+
+            dt_feat = np.concatenate([raw_vals, norm_ages, obs_masks])
+            d_vals, d_masks = self.tree_bank.predict_zone(dt_feat, has_exit=z_data.get("has_exit", False))
+            tree_values.append(d_vals)
+            tree_masks.append(d_masks)
+            u_features.append(np.concatenate([raw_vals, norm_ages, obs_masks, np.array(d_vals, dtype=np.float32)]))
+
+        return {"detailed": detailed_list, "tree_values": tree_values, "tree_masks": tree_masks, "u_features": u_features}
+
+    def _encode_zone_inputs(self, zone_inputs: Dict[str, Any]) -> SpatialOutput:
+        """Hypernetwork generates Vn/Ve from the zone inputs; the GNN encodes them into H."""
+        return self.spatial.encode_spatial(
+            stack_zone_features(zone_inputs["detailed"]),
+            np.array(zone_inputs["tree_values"], dtype=np.float32),
+            np.array(zone_inputs["tree_masks"], dtype=np.float32),
+            tree_version=self.manifest.tree_version,
+        )
+
+    def spatial_snapshot(
+        self,
+        as_of_time: datetime,
+        recent_observations: List[ObservationRecord]
+    ) -> Tuple[SpatialOutput, Dict[str, Any]]:
+        """
+        Callable spatial inference: the same path step() uses, without touching the
+        temporal forecaster or its history buffer. Inputs are observations only; reports
+        received after as_of_time are ignored. Returns (SpatialOutput, zone_inputs).
+        """
+        zone_inputs = self._zone_inputs(as_of_time, recent_observations)
+        return self._encode_zone_inputs(zone_inputs), zone_inputs
+
     def step(
         self,
         scenario_id: str,
@@ -154,55 +200,28 @@ class ArchitecturePipeline:
         3. Assembles U[z,t] and appends to rolling history.
         4. Runs MultivariateTemporalForecaster -> multi-horizon forecasts.
         """
-        tree_records: List[TreeOutputRecord] = []
         forecast_records: List[ForecastRecord] = []
 
-        zone_lookup = {z["zone_id"]: z for z in self.venue.zones}
-        num_zones = len(self.venue.zones)
-
-        # 1. Evaluate Decision Tree Bank for each zone
-        tree_vectors: List[List[float]] = []
-        tree_masks_list: List[List[int]] = []
-        node_features_list: List[np.ndarray] = []
-        detailed_list: List[Dict[str, np.ndarray]] = []
-
-        for z_data in self.venue.zones:
-            z_id = z_data["zone_id"]
-            has_exit = z_data.get("has_exit", False)
-            detailed = self.extract_zone_features_detailed(z_id, as_of_time, recent_observations)
-            detailed_list.append(detailed)
-            raw_vals, norm_ages, obs_masks = self._legacy_zone_features(detailed)
-
-            # Combined input for decision tree
-            dt_feat = np.concatenate([raw_vals, norm_ages, obs_masks])
-            d_vals, d_masks = self.tree_bank.predict_zone(dt_feat, has_exit=has_exit)
-
-            tree_vectors.append(d_vals)
-            tree_masks_list.append(d_masks)
-
-            tree_rec = TreeOutputRecord(
+        # 1. Decision-tree vector D[z,t] per zone, then 2. hypernetwork + GNN -> H[z,t]
+        zone_inputs = self._zone_inputs(as_of_time, recent_observations)
+        tree_vectors = zone_inputs["tree_values"]
+        tree_masks_list = zone_inputs["tree_masks"]
+        node_features_list = zone_inputs["u_features"]
+        tree_records: List[TreeOutputRecord] = [
+            TreeOutputRecord(
                 scenario_id=scenario_id,
-                zone_id=z_id,
+                zone_id=z_data["zone_id"],
                 evaluation_time=as_of_time,
                 tree_version=self.manifest.tree_version,
                 channel_names=TREE_CHANNELS,
-                channel_values=d_vals,
-                channel_masks=d_masks
+                channel_values=tree_vectors[i],
+                channel_masks=tree_masks_list[i]
             )
-            tree_records.append(tree_rec)
+            for i, z_data in enumerate(self.venue.zones)
+        ]
 
-            # Non-spatial U features: [raw (6), norm_ages (6), obs_masks (6), d_vals (6)] = 24
-            node_feat = np.concatenate([raw_vals, norm_ages, obs_masks, np.array(d_vals, dtype=np.float32)])
-            node_features_list.append(node_feat)
-
-        # 2. Hypernetwork generates node values and edge values, then GNN contextualizes them
-        spatial_out = self.spatial.encode_spatial(
-            stack_zone_features(detailed_list),
-            np.array(tree_vectors, dtype=np.float32),
-            np.array(tree_masks_list, dtype=np.float32),
-            tree_version=self.manifest.tree_version,
-        )
-        h_embeddings = spatial_out.H  # [num_zones, 16]
+        spatial_out = self._encode_zone_inputs(zone_inputs)
+        h_embeddings = spatial_out.H  # [num_zones, embed_dim]
         self.last_generated = {
             "node_values": spatial_out.Vn,
             "edge_values": spatial_out.Ve,

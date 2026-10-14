@@ -198,6 +198,42 @@ class SpatialOutput:
     edge_ids: List[str]  # row order of Ve
     version_metadata: Dict[str, Any]
 
+    def to_dict(self, decimals: int = 6) -> Dict[str, Any]:
+        def rows(a: np.ndarray, ids: List[str]) -> Dict[str, List[float]]:
+            return {i: [round(float(x), decimals) for x in r] for i, r in zip(ids, a)}
+        return {
+            "H": rows(self.H, self.zone_ids), "Vn": rows(self.Vn, self.zone_ids), "Ve": rows(self.Ve, self.edge_ids),
+            "shapes": {"H": list(self.H.shape), "Vn": list(self.Vn.shape), "Ve": list(self.Ve.shape)},
+            "zone_ids": self.zone_ids, "edge_ids": self.edge_ids, "version_metadata": self.version_metadata,
+        }
+
+def spatial_contract(encoder: "SpatialEncoder") -> Dict[str, Any]:
+    """
+    The output contract of the loaded hypernetwork+GNN pair, read from the modules' own
+    configs (never assumed). Consumers such as the temporal forecaster must size their
+    spatial input from h_dim here and record pair_id/versions with any weights they train.
+    """
+    hn, gnn = encoder.hypernet, encoder.gnn
+    return {
+        "h_dim": gnn.config["embed_dim"],
+        "vn_dim": hn.config["node_out_dim"],
+        "ve_dim": hn.config["edge_out_dim"],
+        "num_zones": encoder.graph.num_nodes,
+        "num_edges": encoder.graph.num_edges,
+        "zone_ids": list(encoder.graph.zone_ids),
+        "edge_ids": list(encoder.graph.edge_ids),
+        "dyn_feature_names": list(SPATIAL_FEATURE_NAMES),
+        "schema_hash": schema_hash(),
+        "hypernet_version": hn.version,
+        "gnn_version": gnn.version,
+        "hypernet_config": dict(hn.config),
+        "gnn_config": dict(gnn.config),
+        "scaler_id": hn.metadata.get("scaler_id"),
+        "training_status": hn.metadata.get("training_status"),
+        "pair_id": hn.metadata.get("pair_id"),
+        "edge_values_nonnegative": True,  # softplus output
+    }
+
 # Experiment outputs that must never be referenced by a pipeline manifest
 NON_PROMOTABLE_STATUSES = ("smoke_trained_auxiliary",)
 
