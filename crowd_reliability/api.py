@@ -22,6 +22,7 @@ from crowd_reliability.simulation.generator import ObservationGenerator
 from crowd_reliability.ml.pipeline import ArchitecturePipeline
 from crowd_reliability.ml.tree_bank import DecisionTreeBank
 from crowd_reliability.ml.trees import TreeSnapshot, infer_tree_vector
+from crowd_reliability.ml.features import FEATURE_SCHEMA_VERSION
 from crowd_reliability.services.central_source import CentralSourceAdapter
 from crowd_reliability.services.comparator import ForecastComparator
 from crowd_reliability.services.evaluator import EvaluationService
@@ -283,6 +284,8 @@ def get_tree_outputs(
         ObservationRecord.scenario_id == scenario_id
     ).all()
 
+    bank = _load_tree_bank()
+
     if as_of:
         try:
             eval_time = datetime.fromisoformat(as_of)
@@ -294,7 +297,18 @@ def get_tree_outputs(
     elif observations:
         eval_time = max(o.received_at for o in observations)
     else:
-        return {"scenario_id": scenario_id, "zones": []}
+        # No observations and no as_of: there is nothing to evaluate, but the
+        # contract metadata (versions, channel order/units) is still returned so
+        # the response shape is the same whether or not data has been seeded.
+        return {
+            "scenario_id": scenario_id,
+            "evaluation_time": None,
+            "tree_version": bank.version,
+            "feature_schema_version": FEATURE_SCHEMA_VERSION,
+            "scaler_version": getattr(bank.scaler, "version", None) if bank.scaler is not None else None,
+            "channel_metadata": bank.channel_metadata(),
+            "zones": [],
+        }
 
     zones = db.query(ZoneRecord).all()
     if zones:
@@ -303,7 +317,6 @@ def get_tree_outputs(
         zone_exit_flags = {z["zone_id"]: bool(z.get("has_exit", False)) for z in get_default_venue().zones}
     zone_ids = sorted(zone_exit_flags.keys())
 
-    bank = _load_tree_bank()
     snapshot = TreeSnapshot(
         scenario_id=scenario_id,
         as_of_time=eval_time,

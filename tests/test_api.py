@@ -104,3 +104,62 @@ def test_api_tree_outputs_invalid_as_of():
     assert resp.status_code == 422
     assert "detail" in resp.json()
 
+
+
+def test_api_tree_outputs_route_with_observations():
+    # Exercises the populated branch that the empty-database test above skips:
+    # real observations -> six channels per zone, exit applicability masks,
+    # and as_of isolation (a report received after as_of must not change output).
+    from datetime import datetime, timedelta
+    from crowd_reliability.database import SessionLocal
+    from crowd_reliability.models.schema import ObservationRecord
+
+    scenario = "test_tree_outputs_seeded"
+    t0 = datetime(2026, 1, 1, 0, 1, 0)
+    as_of = t0 + timedelta(seconds=10)
+
+    def obs(report_id, zone, variable, value, unit, received_at):
+        return ObservationRecord(
+            report_id=report_id, scenario_id=scenario, zone_id=zone, source_id="test_sensor",
+            variable=variable, value=value, unit=unit,
+            observed_at=received_at - timedelta(seconds=3),
+            published_at=received_at - timedelta(seconds=2),
+            received_at=received_at,
+        )
+
+    db = SessionLocal()
+    try:
+        db.add_all([
+            obs("r1", "concourse", "density", 2.5, "p/m2", t0),
+            obs("r2", "concourse", "speed", 0.4, "m/s", t0),
+            obs("r3", "exit_1", "exit_open", 0.0, "binary", t0),
+            obs("r4", "exit_1", "queue_length", 30.0, "persons", t0),
+        ])
+        db.commit()
+
+        url = f"/api/scenarios/{scenario}/tree-outputs?as_of={as_of.isoformat()}"
+        first = client.get(url)
+        assert first.status_code == 200
+        data = first.json()
+        assert data["tree_version"] == "dt_bank_v2"
+        assert data["evaluation_time"] == as_of.isoformat()
+
+        zones = {z["zone_id"]: z for z in data["zones"]}
+        assert "concourse" in zones and "exit_1" in zones
+        for z in zones.values():
+            assert z["channel_names"] == [c["name"] for c in data["channel_metadata"]]
+            assert len(z["channel_values"]) == 6 and len(z["channel_masks"]) == 6
+        assert zones["exit_1"]["channel_masks"][5] == 1
+        assert zones["concourse"]["channel_masks"][5] == 0
+        assert zones["concourse"]["channel_values"][5] == 0.0
+
+        # Deterministic, and a report received after as_of is invisible.
+        db.add(obs("r5", "concourse", "density", 9.0, "p/m2", as_of + timedelta(seconds=30)))
+        db.commit()
+        second = client.get(url)
+        assert second.status_code == 200
+        assert second.json() == data
+    finally:
+        db.query(ObservationRecord).filter(ObservationRecord.scenario_id == scenario).delete()
+        db.commit()
+        db.close()
