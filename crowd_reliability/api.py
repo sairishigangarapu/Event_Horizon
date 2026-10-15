@@ -19,7 +19,10 @@ from crowd_reliability.simulation.scenarios import (
 )
 from crowd_reliability.simulation.simulator import CrowdSimulator
 from crowd_reliability.simulation.generator import ObservationGenerator
-from crowd_reliability.ml.pipeline import ArchitecturePipeline
+from crowd_reliability.ml.pipeline import (
+    ArchitecturePipeline, ModelArtifactError, load_manifest, load_verified_tree_bank,
+)
+from crowd_reliability.models.manifest import assess_readiness
 from crowd_reliability.ml.tree_bank import DecisionTreeBank
 from crowd_reliability.ml.trees import TreeSnapshot, infer_tree_vector
 from crowd_reliability.ml.features import FEATURE_SCHEMA_VERSION
@@ -118,7 +121,7 @@ def get_venue(db: Session = Depends(get_db)):
 def get_active_manifest(db: Session = Depends(get_db)):
     manifest_rec = db.query(ModelManifestRecord).filter(ModelManifestRecord.is_active == True).first()
     if not manifest_rec:
-        return PipelineManifest().model_dump()
+        return {**PipelineManifest().model_dump(), **_artifact_status()}
     return {
         "pipeline_version": manifest_rec.pipeline_version,
         "tree_version": manifest_rec.tree_version,
@@ -129,7 +132,8 @@ def get_active_manifest(db: Session = Depends(get_db)):
         "schema_version": manifest_rec.schema_version,
         "training_cutoff": manifest_rec.training_cutoff.isoformat() if manifest_rec.training_cutoff else None,
         "scenario_split": manifest_rec.scenario_split,
-        "model_hashes": manifest_rec.model_hashes or {}
+        "model_hashes": manifest_rec.model_hashes or {},
+        **_artifact_status(),
     }
 
 @app.get("/api/forecasts")
@@ -141,6 +145,7 @@ def get_forecasts(
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db)
 ):
+    stream_b_status = _stream_b_status()
     query = db.query(ForecastRecord).filter(ForecastRecord.scenario_id == scenario_id)
     if zone_id:
         query = query.filter(ForecastRecord.zone_id == zone_id)
@@ -162,6 +167,7 @@ def get_forecasts(
         "total_comparisons": total_comparisons,
         "limit": limit,
         "offset": offset,
+        "stream_b_status": stream_b_status,
         "count_arch": len(arch_recs),
         "count_cent": len(cent_recs),
         "comparisons": [
@@ -248,25 +254,56 @@ _TREE_BANK_CACHE: Dict[str, Any] = {}
 
 
 def _load_tree_bank() -> DecisionTreeBank:
-    """Lazily load the canonical fitted bank: trained v2 artifact preferred, production as fallback."""
-    if "bank" in _TREE_BANK_CACHE:
-        return _TREE_BANK_CACHE["bank"]
-    bank = DecisionTreeBank()
-    versioned_path = os.path.join("models", "trees", f"tree_bank_{bank.version}.joblib")
-    prod_path = os.path.join(settings.model_dir, "tree_bank.joblib")
-    if os.path.exists(versioned_path):
-        bank.load(versioned_path)
-    elif os.path.exists(prod_path):
-        bank.load(prod_path)
-    _TREE_BANK_CACHE["bank"] = bank
-    return bank
+    """
+    The serving tree bank: the same hash-verified models/production artifact the
+    pipeline loads (crowd_reliability.ml.pipeline.load_verified_tree_bank).
+    Raises ModelArtifactError instead of falling back to an unfitted bank.
+    """
+    key = os.path.abspath(settings.model_dir)
+    if key not in _TREE_BANK_CACHE:
+        _TREE_BANK_CACHE[key] = load_verified_tree_bank(settings.model_dir)
+    return _TREE_BANK_CACHE[key]
+
+
+def _artifact_status() -> Dict[str, Any]:
+    """Training status and readiness read from the active manifest file."""
+    try:
+        manifest = load_manifest(settings.model_dir)
+    except ModelArtifactError as exc:
+        return {"training_status": None, "readiness": None, "artifact_error": str(exc)}
+    return {"training_status": manifest.training_status, "readiness": assess_readiness(manifest)}
+
+
+def _stream_b_status() -> Dict[str, Any]:
+    """Readiness label for Stream B; in strict mode, refuse to serve unvalidated forecasts."""
+    status = _artifact_status()
+    readiness = status["readiness"]
+    if readiness is None:
+        raise HTTPException(status_code=503, detail=f"Model artifacts unavailable: {status['artifact_error']}")
+    if settings.require_validated_models and not readiness["production_ready"]:
+        raise HTTPException(status_code=503, detail=readiness["notice"])
+    return {k: readiness[k] for k in ("serving_mode", "production_ready", "unvalidated_stages", "notice")}
 
 
 @app.get("/health")
 def health():
-    bank = _load_tree_bank()
-    return {"status": "ok", "model_loaded": bool(bank.is_fitted),
-            "tree_version": bank.version if bank.is_fitted else None}
+    status = _artifact_status()
+    try:
+        bank = _load_tree_bank()
+        bank_error = None
+    except ModelArtifactError as exc:
+        bank, bank_error = None, str(exc)
+    readiness = status["readiness"]
+    ok = bank is not None and readiness is not None
+    return {
+        "status": "ok" if ok else "degraded",
+        "model_loaded": bank is not None,
+        "tree_version": bank.version if bank is not None else None,
+        "serving_mode": readiness["serving_mode"] if readiness else None,
+        "require_validated_models": settings.require_validated_models,
+        "readiness": readiness,
+        "errors": [e for e in (bank_error, status.get("artifact_error")) if e],
+    }
 
 
 @app.get("/api/scenarios/{scenario_id}/tree-outputs")
@@ -284,7 +321,10 @@ def get_tree_outputs(
         ObservationRecord.scenario_id == scenario_id
     ).all()
 
-    bank = _load_tree_bank()
+    try:
+        bank = _load_tree_bank()
+    except ModelArtifactError as exc:
+        raise HTTPException(status_code=503, detail=f"Tree bank unavailable: {exc}") from exc
 
     if as_of:
         try:

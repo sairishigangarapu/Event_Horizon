@@ -7,7 +7,7 @@ import pytest
 from crowd_reliability.simulation.scenarios import get_default_venue, SCENARIO_PRESETS
 from crowd_reliability.simulation.simulator import CrowdSimulator
 from crowd_reliability.simulation.generator import ObservationGenerator
-from crowd_reliability.ml.pipeline import ArchitecturePipeline
+from crowd_reliability.ml.pipeline import ArchitecturePipeline, load_verified_tree_bank
 from crowd_reliability.ml.tree_bank import TREE_CHANNELS
 
 def test_pipeline_step_and_serialization():
@@ -39,7 +39,8 @@ def test_pipeline_step_and_serialization():
         assert fr.target_at > fr.issued_at
         assert fr.variable in ["density", "speed", "inflow", "outflow", "queue_length", "exit_open"]
 
-    # 3. Test serialization
+    # 3. Test serialization. Only a fitted tree bank may be saved, so use the production bank.
+    pipeline.tree_bank = load_verified_tree_bank(os.path.join("models", "production"))
     tmp_dir = tempfile.mkdtemp()
     try:
         pipeline.save_pipeline(tmp_dir)
@@ -64,3 +65,40 @@ def test_pipeline_step_and_serialization():
     finally:
         shutil.rmtree(tmp_dir)
 
+
+
+def _forecast_values(pipeline, scenario_id, t_eval, obs):
+    pipeline.history_buffer.clear()  # compare single calls, not rolling state
+    _, forecasts = pipeline.step(scenario_id, t_eval, obs)
+    return [(f.zone_id, f.variable, f.target_at, f.value) for f in forecasts]
+
+
+def test_step_is_deterministic_for_loaded_production_pipeline():
+    # Regression: the GRU stayed in train mode, so its inter-layer dropout made
+    # identical inputs produce different Stream B forecasts.
+    venue = get_default_venue()
+    sc = SCENARIO_PRESETS["crowd_surge"]
+    refs, _ = CrowdSimulator(venue=venue, seed=42).run_simulation(sc)
+    obs = ObservationGenerator(seed=42).generate_observations(refs, sc)
+    t_eval = sorted(o.received_at for o in obs)[len(obs) // 2]
+
+    pipeline = ArchitecturePipeline(venue=venue)
+    pipeline.load_pipeline(os.path.join("models", "production"))
+    assert not pipeline.temporal_model.training
+
+    first = _forecast_values(pipeline, sc.scenario_id, t_eval, obs)
+    assert first
+    assert _forecast_values(pipeline, sc.scenario_id, t_eval, obs) == first
+
+    # Even if a caller flips the model to train(), inference must stay deterministic.
+    pipeline.temporal_model.train()
+    assert _forecast_values(pipeline, sc.scenario_id, t_eval, obs) == first
+
+
+def test_temporal_checkpoint_loads_in_eval_mode(tmp_path):
+    from crowd_reliability.ml.temporal import MultivariateTemporalForecaster
+    model = MultivariateTemporalForecaster(input_dim=40)
+    path = str(tmp_path / "temporal.pt")
+    model.save(path)
+    assert MultivariateTemporalForecaster.load(path).training is False
+    assert ArchitecturePipeline().temporal_model.training is False

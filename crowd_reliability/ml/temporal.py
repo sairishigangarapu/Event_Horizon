@@ -111,4 +111,7 @@ class MultivariateTemporalForecaster(nn.Module):
         )
         model.load_state_dict(checkpoint["state_dict"])
         model.version = checkpoint.get("version", model.version)
+        # A loaded checkpoint is for inference: disable the inter-layer GRU dropout,
+        # otherwise identical inputs produce different forecasts.
+        model.eval()
         return model

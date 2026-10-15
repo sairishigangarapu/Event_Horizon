@@ -10,7 +10,7 @@ class PipelineManifest(BaseModel):
     hypernet_version: str = "hypernet_v2"
     gnn_version: str = "gnn_edge_v2"
     temporal_version: str = "gru_forecaster_v1"
-    scaler_version: str = "standard_scaler_v1"
+    scaler_version: Optional[str] = "standard_scaler_v1"
     schema_version: str = "v1.0"
     training_cutoff: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     scenario_split: str = "production"
@@ -38,3 +38,41 @@ class PipelineManifest(BaseModel):
         with open(filepath, "r") as f:
             data = json.load(f)
         return cls(**data)
+
+
+# ---------------------------------------------------------------- readiness
+
+VALIDATED_STATUS = "trained_validated"
+NEURAL_STAGES = ("hypernet", "gnn", "temporal")
+EXPERIMENTAL_NOTICE = (
+    "Stream B (architecture) forecasts come from neural stages that are not trained and validated "
+    "({stages}). They demonstrate the data path, not forecast skill. Only the decision-tree bank is fitted."
+)
+
+
+class ModelNotReadyError(RuntimeError):
+    """Raised in strict mode when the active pipeline is not trained and validated."""
+
+
+def assess_readiness(manifest: "PipelineManifest") -> Dict[str, Any]:
+    """
+    Readiness of the active pipeline, read only from the manifest.
+
+    production_ready requires every neural stage to be VALIDATED_STATUS and a
+    recorded metrics_summary. Anything else is served as "experimental", with a
+    notice that names the unvalidated stages. Missing statuses count as "unknown".
+    """
+    stages = {s: manifest.training_status.get(s, "unknown") for s in NEURAL_STAGES}
+    unvalidated = [s for s, status in stages.items() if status != VALIDATED_STATUS]
+    has_metrics = manifest.metrics_summary is not None
+    ready = not unvalidated and has_metrics
+    return {
+        "production_ready": ready,
+        "serving_mode": "validated" if ready else "experimental",
+        "pipeline_version": manifest.pipeline_version,
+        "neural_stage_status": stages,
+        "unvalidated_stages": unvalidated,
+        "metrics_summary_present": has_metrics,
+        "notice": None if ready else EXPERIMENTAL_NOTICE.format(
+            stages=", ".join(f"{s}: {stages[s]}" for s in unvalidated) or "no validation metrics recorded"),
+    }

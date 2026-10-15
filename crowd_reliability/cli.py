@@ -31,7 +31,7 @@ from crowd_reliability.ml.tree_train import (
 )
 from crowd_reliability.ml.trees import TreeSnapshot, TreeVectorResult, infer_tree_vector
 from crowd_reliability.dataset.adapter import ingest_dataset, load_split_scenarios, load_zone_flags
-from crowd_reliability.services.central_source import CentralSourceAdapter
+from crowd_reliability.services.central_source import CentralSourceAdapter, issue_grid
 from crowd_reliability.services.comparator import ForecastComparator
 from crowd_reliability.services.evaluator import EvaluationService
 
@@ -108,13 +108,14 @@ def cmd_seed_demo(seed: int = 42):
             all_ref_records.extend(ref_records)
             all_obs_records.extend(obs_records)
 
-        # 2. Build and export central forecast replay fixture for 'crowd_surge'
-        surge_sc = SCENARIO_PRESETS["crowd_surge"]
+        # 2. Build and export central forecast replay fixture for 'crowd_surge'.
+        #    Stream A is built from observations only, never from reference states.
         surge_refs = [r for r in all_ref_records if r.scenario_id == "crowd_surge"]
+        surge_obs_for_central = [o for o in all_obs_records if o.scenario_id == "crowd_surge"]
         print("[seed-demo] Generating simulated central forecast fixture...")
         cent_forecasts = central_adapter.generate_simulated_forecasts(
             scenario_id="crowd_surge",
-            ref_records=surge_refs,
+            observations=surge_obs_for_central,
             venue=venue,
             horizons_sec=[30, 60, 120]
         )
@@ -183,6 +184,109 @@ def cmd_seed_demo(seed: int = 42):
         print("[seed-demo] Demo seeding complete! Summary evaluation available.")
     finally:
         db.close()
+
+def _model_dir_hashes(model_dir: str) -> Dict[str, str]:
+    from crowd_reliability.ml.pipeline import _calc_sha256
+    hashes = {}
+    for root, _, files in os.walk(model_dir):
+        for name in files:
+            path = os.path.join(root, name)
+            hashes[os.path.relpath(path, model_dir)] = _calc_sha256(path)
+    return hashes
+
+
+def cmd_seed_serving(seed: int = 42, model_dir: str = None, central_csv_path: str = None,
+                     step_seconds: int = 5, central_step_seconds: int = 15):
+    """
+    Seeds the database for serving from the COMMITTED model artifacts.
+
+    Unlike seed-demo, this never trains or saves models: it loads model_dir
+    read-only, fails if a required artifact is missing, and verifies afterwards
+    that no file under model_dir changed. For every preset scenario it writes
+    reference states, observations, tree outputs, Stream B forecasts (one
+    pipeline step every step_seconds) and Stream A simulated central forecasts
+    (observation-only). Re-running replaces the rows of those scenarios.
+    """
+    model_dir = model_dir or settings.model_dir
+    central_csv_path = central_csv_path or settings.central_forecast_path
+
+    required = ["manifest.json", "tree_bank.joblib", "temporal_model.pt"]
+    missing = [f for f in required if not os.path.exists(os.path.join(model_dir, f))]
+    if missing:
+        raise FileNotFoundError(f"[seed-serving] Missing model artifacts in {model_dir}: {missing}")
+
+    hashes_before = _model_dir_hashes(model_dir)
+    venue = get_default_venue()
+    pipeline = ArchitecturePipeline(venue=venue)
+    pipeline.load_pipeline(model_dir)  # every artifact required and hash-verified
+    readiness = pipeline.require_ready(settings.require_validated_models)
+    pipeline.horizons_sec = list(pipeline.temporal_model.horizons_sec)
+    print(f"[seed-serving] Loaded pipeline {pipeline.manifest.pipeline_version} from {model_dir} "
+          f"(serving_mode={readiness['serving_mode']}, training_status={pipeline.manifest.training_status})")
+    if readiness["notice"]:
+        print(f"[seed-serving] NOTE: {readiness['notice']}")
+
+    cmd_db_init()
+    simulator = CrowdSimulator(venue=venue, seed=seed)
+    obs_generator = ObservationGenerator(seed=seed)
+    central_adapter = CentralSourceAdapter()
+
+    db = SessionLocal()
+    all_central: List[ForecastRecord] = []
+    try:
+        scenario_ids = list(SCENARIO_PRESETS.keys())
+        for model in (ObservationRecord, ReferenceStateRecord, ForecastRecord, TreeOutputRecord):
+            db.query(model).filter(model.scenario_id.in_(scenario_ids)).delete(synchronize_session=False)
+        db.commit()
+
+        for sc_name, sc_config in SCENARIO_PRESETS.items():
+            ref_records, _ = simulator.run_simulation(sc_config)
+            obs_records = obs_generator.generate_observations(ref_records, sc_config)
+
+            central = central_adapter.generate_simulated_forecasts(
+                scenario_id=sc_name, observations=obs_records, venue=venue,
+                horizons_sec=pipeline.horizons_sec, step_interval_sec=central_step_seconds,
+            )
+
+            tree_records: List[TreeOutputRecord] = []
+            arch_forecasts: List[ForecastRecord] = []
+            pipeline.history_buffer.pop(sc_name, None)
+            for t_issue in issue_grid([o.received_at for o in obs_records], step_seconds):
+                trees, f_recs = pipeline.step(sc_name, t_issue, obs_records)
+                tree_records.extend(trees)
+                arch_forecasts.extend(f_recs)
+
+            for batch in (ref_records, obs_records, tree_records, arch_forecasts, central):
+                db.bulk_save_objects(batch)
+            db.commit()
+            all_central.extend(central)
+            print(f"[seed-serving] {sc_name}: {len(obs_records)} observations, "
+                  f"{len(arch_forecasts)} architecture forecasts, {len(central)} central forecasts")
+
+        m = pipeline.manifest
+        cutoff = m.training_cutoff
+        if isinstance(cutoff, str):
+            cutoff = datetime.fromisoformat(cutoff)
+        db.query(ModelManifestRecord).update({ModelManifestRecord.is_active: False})
+        db.merge(ModelManifestRecord(
+            pipeline_version=m.pipeline_version, tree_version=m.tree_version,
+            hypernet_version=m.hypernet_version, gnn_version=m.gnn_version,
+            temporal_version=m.temporal_version, scaler_version=m.scaler_version,
+            schema_version=m.schema_version, training_cutoff=cutoff or datetime.now(timezone.utc),
+            scenario_split=m.scenario_split, is_active=True, model_hashes=m.model_hashes,
+        ))
+        db.commit()
+    finally:
+        db.close()
+
+    if central_csv_path:
+        central_adapter.export_to_csv(all_central, central_csv_path)
+        print(f"[seed-serving] Wrote {len(all_central)} central forecasts to {central_csv_path}")
+
+    if _model_dir_hashes(model_dir) != hashes_before:
+        raise RuntimeError(f"[seed-serving] Files under {model_dir} changed during seeding")
+    print("[seed-serving] Done. Model artifacts unchanged.")
+
 
 def cmd_replay(scenario: str = "crowd_surge", seed: int = 42):
     """Replays a scenario and runs the architecture prediction pipeline."""
@@ -682,6 +786,13 @@ def main():
     p_seed = subparsers.add_parser("seed-demo", help="Generate synthetic scenario fixtures and seed database")
     p_seed.add_argument("--seed", type=int, default=42, help="Random seed")
 
+    # seed-serving
+    p_serve = subparsers.add_parser(
+        "seed-serving",
+        help="Seed the database from the committed models without training or writing models")
+    p_serve.add_argument("--seed", type=int, default=42, help="Simulation seed")
+    p_serve.add_argument("--model-dir", type=str, default=None, help="Model directory (read-only)")
+
     # replay
     p_rep = subparsers.add_parser("replay", help="Replay scenario and run inference")
     p_rep.add_argument("--scenario", type=str, default="crowd_surge", help="Scenario identifier")
@@ -755,6 +866,8 @@ def main():
         cmd_db_init()
     elif args.command == "seed-demo":
         cmd_seed_demo(seed=args.seed)
+    elif args.command == "seed-serving":
+        cmd_seed_serving(seed=args.seed, model_dir=args.model_dir)
     elif args.command == "replay":
         cmd_replay(scenario=args.scenario, seed=args.seed)
     elif args.command == "evaluate":

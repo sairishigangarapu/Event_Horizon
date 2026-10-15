@@ -1,109 +1,148 @@
+import hashlib
 import os
-import uuid
 import pandas as pd
-from datetime import datetime, timezone, timedelta
-from typing import List, Dict, Optional, Any
-from crowd_reliability.models.schema import ForecastRecord, ReferenceStateRecord
+from datetime import datetime, timedelta
+from typing import List, Dict, Optional, Tuple
+from crowd_reliability.models.schema import ForecastRecord, ObservationRecord
 from crowd_reliability.simulation.scenarios import VenueLayout, get_default_venue
 from crowd_reliability.ml.temporal import TARGET_VAR_NAMES
 
+# Simulated central provider: smoothing parameters (documented, not tuned).
+CENTRAL_EWMA_ALPHA = 0.35          # weight of each newer report in the smoothed level
+CENTRAL_LOOKBACK_SECONDS = 90.0    # reports observed earlier than this are ignored
+CENTRAL_INGESTION_LAG_SECONDS = 2.0
+CENTRAL_PROVIDER_VERSION = "simulated_central_obs_ewma_v2"
+
+_UNITS = {
+    "density": "p/m2",
+    "speed": "m/s",
+    "inflow": "p/s",
+    "outflow": "p/s",
+    "queue_length": "persons",
+    "exit_open": "binary",
+}
+
+
+def _grid_floor(t: datetime, step_sec: int) -> datetime:
+    """Floor t to a step_sec grid anchored at 2026-01-01 (same tz-awareness as t)."""
+    epoch = datetime(2026, 1, 1, tzinfo=t.tzinfo)
+    offset = int((t - epoch).total_seconds() // step_sec) * step_sec
+    return epoch + timedelta(seconds=offset)
+
+
+def issue_grid(times: List[datetime], step_sec: int) -> List[datetime]:
+    """Grid instants (every step_sec, anchored at 2026-01-01) spanning [min(times), max(times)]."""
+    if not times:
+        return []
+    first, last = min(times), max(times)
+    t = _grid_floor(first, step_sec)
+    if t < first:
+        t += timedelta(seconds=step_sec)
+    grid = []
+    while t <= last:
+        grid.append(t)
+        t += timedelta(seconds=step_sec)
+    return grid
+
+
+def _forecast_id(scenario_id: str, zone_id: str, variable: str, issued_at: datetime, horizon_sec: int) -> str:
+    key = f"{scenario_id}|{zone_id}|{variable}|{issued_at.isoformat()}|{horizon_sec}"
+    return "f_cent_" + hashlib.sha1(key.encode("utf-8")).hexdigest()[:12]
+
+
 class CentralSourceAdapter:
     """
-    Adapter for central-source forecast feed (Stream A).
-    In evaluation / demo mode, replays pre-generated forecasts from CSV
-    or generates realistic simulated central forecasts (labelled 'simulated central forecast').
+    Adapter for the central-source forecast feed (Stream A).
+
+    In evaluation / demo mode it replays forecasts from CSV, or generates a
+    *simulated central forecast* from the observation stream. The simulated
+    provider is an independent, deliberately simple forecaster: it never reads
+    simulator reference states, so it cannot see current or future truth.
     """
     def __init__(self, mode: str = "replay", fixture_path: Optional[str] = None):
         self.mode = mode
         self.fixture_path = fixture_path
-        self.provider_version = "simulated_central_v1.0"
+        self.provider_version = CENTRAL_PROVIDER_VERSION
         self._cached_forecasts: List[ForecastRecord] = []
 
     def generate_simulated_forecasts(
         self,
         scenario_id: str,
-        ref_records: List[ReferenceStateRecord],
+        observations: List[ObservationRecord],
         venue: VenueLayout,
-        horizons_sec: List[int] = None,
-        step_interval_sec: int = 15
+        horizons_sec: Optional[List[int]] = None,
+        step_interval_sec: int = 15,
+        issue_times: Optional[List[datetime]] = None,
     ) -> List[ForecastRecord]:
         """
-        Generates baseline central forecasts from historical trend with smoothing.
-        Simulated central providers often have slower reaction times to sudden local changes.
+        Simulated central forecasts built only from observations.
+
+        At each issue time t (every step_interval_sec over the span of received
+        reports, unless issue_times is given), for every zone and variable:
+          - candidates are reports with received_at <= t and observed_at within
+            CENTRAL_LOOKBACK_SECONDS of t (nothing received after t is used);
+          - numeric variables: exponentially weighted level of the candidates in
+            observed_at order (a lagging, smoothed provider);
+          - exit_open: the most recently observed report (naive persistence);
+          - the level is held constant across all horizons.
+        A zone/variable with no candidate report gets no forecast: it is
+        unavailable, never filled with a default. exit_open is only issued for
+        exit zones. Forecast IDs are deterministic.
         """
         if horizons_sec is None:
             horizons_sec = [30, 60, 120]
 
-        # Organize reference records by (zone_id, variable, state_at)
-        ref_map: Dict[Tuple[str, str, str], float] = {}
-        unique_times: List[datetime] = []
-        time_set = set()
-
-        for r in ref_records:
-            t_iso = r.state_at.isoformat()
-            ref_map[(r.zone_id, r.variable, t_iso)] = r.value
-            if t_iso not in time_set:
-                time_set.add(t_iso)
-                unique_times.append(r.state_at)
-
-        unique_times.sort()
-        forecasts: List[ForecastRecord] = []
-
-        # Central source issues forecasts every step_interval_sec
-        units = {
-            "density": "p/m2",
-            "speed": "m/s",
-            "inflow": "p/s",
-            "outflow": "p/s",
-            "queue_length": "persons",
-            "exit_open": "binary"
-        }
-
-        for t_issue in unique_times:
-            # Issue every step_interval_sec
-            sec = int(t_issue.timestamp())
-            if sec % step_interval_sec != 0:
+        by_key: Dict[Tuple[str, str], List[ObservationRecord]] = {}
+        for o in observations:
+            if o.scenario_id not in (None, scenario_id) or o.variable not in _UNITS:
                 continue
+            by_key.setdefault((o.zone_id, o.variable), []).append(o)
+        if not by_key:
+            self._cached_forecasts = []
+            return []
 
+        if issue_times is None:
+            issue_times = issue_grid(
+                [o.received_at for reports in by_key.values() for o in reports], step_interval_sec
+            )
+
+        forecasts: List[ForecastRecord] = []
+        lookback = timedelta(seconds=CENTRAL_LOOKBACK_SECONDS)
+        for t_issue in sorted(issue_times):
             for z_data in venue.zones:
                 z_id = z_data["zone_id"]
                 has_exit = z_data.get("has_exit", False)
+                for var_name in TARGET_VAR_NAMES:
+                    if var_name == "exit_open" and not has_exit:
+                        continue
+                    candidates = sorted(
+                        (o for o in by_key.get((z_id, var_name), [])
+                         if o.received_at <= t_issue and o.observed_at >= t_issue - lookback),
+                        key=lambda o: (o.observed_at, o.received_at, o.report_id),
+                    )
+                    if not candidates:
+                        continue  # unavailable: no evidence received by t_issue
+                    if var_name == "exit_open":
+                        val = float(candidates[-1].value)
+                    else:
+                        val = float(candidates[0].value)
+                        for o in candidates[1:]:
+                            val = CENTRAL_EWMA_ALPHA * float(o.value) + (1.0 - CENTRAL_EWMA_ALPHA) * val
 
-                for h_sec in horizons_sec:
-                    target_at = t_issue + timedelta(seconds=h_sec)
-                    target_iso = target_at.isoformat()
-
-                    for var_name in TARGET_VAR_NAMES:
-                        if var_name == "exit_open" and not has_exit:
-                            continue
-
-                        current_val = ref_map.get((z_id, var_name, t_issue.isoformat()), 1.0)
-                        future_true_val = ref_map.get((z_id, var_name, target_iso), current_val)
-
-                        # Central forecast simulates an inertia / moving average model:
-                        # Blends current reading with slower trend (exhibiting lag during surges)
-                        if var_name == "exit_open":
-                            # Central provider has delayed notice of exit closures
-                            val = current_val  # Naive persistence
-                        else:
-                            # Slower exponential smoothing prediction
-                            lag_factor = 0.65
-                            val = lag_factor * current_val + (1.0 - lag_factor) * future_true_val
-
-                        f_rec = ForecastRecord(
-                            forecast_id=f"f_cent_{uuid.uuid4().hex[:8]}",
+                    for h_sec in horizons_sec:
+                        forecasts.append(ForecastRecord(
+                            forecast_id=_forecast_id(scenario_id, z_id, var_name, t_issue, h_sec),
                             stream_id="stream_a_central",
                             scenario_id=scenario_id,
                             zone_id=z_id,
                             variable=var_name,
-                            unit=units[var_name],
+                            unit=_UNITS[var_name],
                             issued_at=t_issue,
-                            received_at=t_issue + timedelta(seconds=2.0),  # Ingestion lag
-                            target_at=target_at,
-                            value=round(max(0.0, float(val)), 4),
-                            model_or_provider_version=self.provider_version
-                        )
-                        forecasts.append(f_rec)
+                            received_at=t_issue + timedelta(seconds=CENTRAL_INGESTION_LAG_SECONDS),
+                            target_at=t_issue + timedelta(seconds=h_sec),
+                            value=round(max(0.0, val), 4),
+                            model_or_provider_version=self.provider_version,
+                        ))
 
         self._cached_forecasts = forecasts
         return forecasts
