@@ -1,0 +1,56 @@
+name: Test and deploy to Hugging Face Space
+
+# Runs the main test suite on every push and pull request. On pushes to main
+# (or a manual run), it then mirrors the deployable files to the Space.
+# One-time setup in GitHub (Settings > Secrets and variables > Actions):
+#   - secret   HF_TOKEN     a Hugging Face access token with write access
+#   - variable HF_SPACE_ID  the Space, e.g. your-hf-user/crowd-reliability
+# The deploy job is skipped until HF_SPACE_ID is set.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: pip install -r requirements.deploy.txt pytest==9.1.1
+      - name: Run tests
+        run: python -m pytest tests -q -p no:cacheprovider --ignore=tests/twin_phase4_integration
+
+  deploy:
+    needs: test
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && vars.HF_SPACE_ID != ''
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Stage Space files
+        run: |
+          mkdir _space
+          git archive HEAD Dockerfile requirements.deploy.txt crowd_reliability dashboard \
+            models/production data/demo deploy/hf_space | tar -x -C _space
+          cp Dockerfile.dockerignore _space/.dockerignore
+          cp deploy/hf_space/README.md _space/README.md
+          find _space -type f | sort
+      - name: Upload to the Space
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HF_SPACE_ID: ${{ vars.HF_SPACE_ID }}
+        run: |
+          pip install huggingface_hub==2.0.0
+          python deploy/hf_space/upload.py _space "${GITHUB_SHA}"
