@@ -1,7 +1,7 @@
 """
 train.py – Synthetic-only smoke-test training and checkpoint saving.
 
-DISCLAIMER: Synthetic scaffold only. NOT for real-world use.
+NOTE: Smoke-test training script and checkpoint exporter for Person 4 models.
 
 Usage (CLI):
     python -m event_horizon_p4.train --epochs 2 --output artifacts/temporal_mock.pt

@@ -26,7 +26,15 @@ class Settings(BaseSettings):
     # untrained stages clearly labelled as experimental.
     require_validated_models: bool = False
 
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        # NOTE (F-021): 'ignore' silently drops unknown env vars (e.g. typo DATABASE_UL
+        # instead of DATABASE_URL). If you suspect a misconfiguration, temporarily set
+        # extra='forbid' locally to surface unexpected variables at startup.
+        extra="ignore",
+        protected_namespaces=("settings_",),  # avoids conflict with reserved model_ prefix
+    )
 
     @property
     def horizons(self) -> List[int]:

@@ -1,8 +1,11 @@
 import os
+import threading
 from datetime import datetime, timezone
 from typing import List, Dict, Any, Optional
-from fastapi import FastAPI, Depends, HTTPException, Query
+from fastapi import FastAPI, Depends, HTTPException, Query, Security, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import APIKeyHeader
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -35,7 +38,10 @@ from contextlib import asynccontextmanager
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    init_db()
+    # F-023: In production environments, database schema should be managed via migrations
+    # or explicit CLI 'db-init'; only auto-create in demo/development/test modes.
+    if getattr(settings, "app_env", "demo") in ("demo", "test", "development"):
+        init_db()
     yield
 
 app = FastAPI(
@@ -44,6 +50,35 @@ app = FastAPI(
     version="0.1.0",
     lifespan=lifespan
 )
+
+@app.middleware("http")
+async def add_security_headers(request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    return response
+
+api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
+
+def verify_auth(api_key: Optional[str] = Security(api_key_header)):
+    if settings.auth_mode == "local_demo":
+        return True
+    if not api_key or (settings.central_api_key and api_key != settings.central_api_key):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or missing API key."
+        )
+    return True
+
+@app.exception_handler(Exception)
+async def generic_exception_handler(request, exc):
+    if isinstance(exc, HTTPException):
+        return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Internal server error", "error_type": type(exc).__name__}
+    )
 
 ALLOWED_ORIGINS = [
     "http://127.0.0.1:8501",
@@ -73,7 +108,7 @@ def get_root():
         "status": "operational"
     }
 
-@app.get("/api/scenarios")
+@app.get("/api/scenarios", dependencies=[Depends(verify_auth)])
 def list_scenarios():
     return [
         {
@@ -86,7 +121,7 @@ def list_scenarios():
         for sc in SCENARIO_PRESETS.values()
     ]
 
-@app.get("/api/venue")
+@app.get("/api/venue", dependencies=[Depends(verify_auth)])
 def get_venue(db: Session = Depends(get_db)):
     zones = db.query(ZoneRecord).all()
     connections = db.query(ConnectionRecord).all()
@@ -137,12 +172,12 @@ def get_active_manifest(db: Session = Depends(get_db)):
         **_artifact_status(),
     }
 
-@app.get("/api/forecasts")
+@app.get("/api/forecasts", dependencies=[Depends(verify_auth)])
 def get_forecasts(
     scenario_id: str = "crowd_surge",
     zone_id: Optional[str] = None,
     variable: Optional[str] = None,
-    limit: int = Query(default=500, ge=1, le=5000),
+    limit: int = Query(default=500, ge=1, le=1000),
     offset: int = Query(default=0, ge=0),
     as_of: Optional[str] = None,
     db: Session = Depends(get_db)
@@ -191,7 +226,7 @@ def get_forecasts(
         ]
     }
 
-@app.get("/api/assessments")
+@app.get("/api/assessments", dependencies=[Depends(verify_auth)])
 def get_assessments(
     scenario_id: str = "crowd_surge",
     zone_id: Optional[str] = None,
@@ -221,11 +256,17 @@ def get_assessments(
     # Variables to assess
     variables = ["density", "speed", "inflow", "outflow", "queue_length", "exit_open"]
     zones_to_eval = [zone_id] if zone_id else list(set(o.zone_id for o in observations))
+    zones_lookup = {z.zone_id: z.zone_type for z in db.query(ZoneRecord).all()}
 
     assessments = []
     for z in zones_to_eval:
+        z_type = zones_lookup.get(z)
         for v in variables:
-            rec = comparator.assess_information(observations, t_eval, z, v)
+            rec = comparator.assess_information(
+                observations, t_eval, z, v,
+                zone_type=z_type,
+                scenario_type=scenario_id
+            )
             assessments.append({
                 "zone_id": z,
                 "variable": v,
@@ -238,7 +279,7 @@ def get_assessments(
 
     return {"scenario_id": scenario_id, "evaluated_at": t_eval.isoformat(), "assessments": assessments}
 
-@app.get("/api/metrics")
+@app.get("/api/metrics", dependencies=[Depends(verify_auth)])
 def get_metrics(
     scenario_id: str = "crowd_surge",
     evaluated_at: Optional[str] = None,
@@ -258,6 +299,7 @@ def get_metrics(
 # --- Shared interface freeze (PDF Section G) additions -----------------------
 
 _TREE_BANK_CACHE: Dict[str, Any] = {}
+_TREE_BANK_LOCK = threading.Lock()
 
 
 def _load_tree_bank() -> DecisionTreeBank:
@@ -267,9 +309,10 @@ def _load_tree_bank() -> DecisionTreeBank:
     Raises ModelArtifactError instead of falling back to an unfitted bank.
     """
     key = os.path.abspath(settings.model_dir)
-    if key not in _TREE_BANK_CACHE:
-        _TREE_BANK_CACHE[key] = load_verified_tree_bank(settings.model_dir)
-    return _TREE_BANK_CACHE[key]
+    with _TREE_BANK_LOCK:
+        if key not in _TREE_BANK_CACHE:
+            _TREE_BANK_CACHE[key] = load_verified_tree_bank(settings.model_dir)
+        return _TREE_BANK_CACHE[key]
 
 
 def _artifact_status() -> Dict[str, Any]:

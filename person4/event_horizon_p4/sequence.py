@@ -1,21 +1,30 @@
 """
 sequence.py – Chronological history window assembly and target-step validation.
 
-DISCLAIMER: Synthetic scaffold only. NOT for real-world use.
+NOTE: This module uses synthetic/mock constants for local sequence assembly;
+its architectural dimensions and chronological constraints are actively
+reconciled with the production ArchitecturePipeline.
 
 Responsibilities:
   - Assemble the fixed GRU input U[z,t] for every zone at every timestep.
   - Enforce chronological ordering; reject scrambled / out-of-order steps.
-  - Build rolling 60-step history tensors and compute target indices.
+  - Build rolling 12-step (60-second) history tensors and compute target indices.
   - Enforce the strict rule: only observations received_at <= issue_time enter
     the model input; reference/ground-truth data is NEVER included.
 
-U[z,t] layout (39 dims):
-  [X(6) | D(6) | H(8) | age(6) | obs_mask(6) | tree_mask(6) | exit_mask(1)]
+U[z,t] layout (40 dims — production, reconciled with Person 3):
+  [raw_values X(6) | norm_ages(6) | obs_masks(6) | tree_values D(6) | spatial H(16)]
+
+Note: tree applicability mask and exit applicability mask are intentionally excluded
+from the GRU input vector. Exit applicability is enforced at the inference output
+layer (inference.py), not as a GRU feature. Tree masks are available internally
+but were excluded from the 40-D layout by agreement with Person 3's embed_dim
+constraint. If this design decision changes, U_DIM in config.py must be updated.
 """
 
 from __future__ import annotations
 
+from collections import deque
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple
@@ -48,6 +57,7 @@ from .synthetic import (
     get_tree_output,
     is_exit_zone,
 )
+from .utils import to_naive_utc
 
 
 # ---------------------------------------------------------------------------
@@ -92,11 +102,7 @@ class WindowBatch:
 # Feature assembly helpers
 # ---------------------------------------------------------------------------
 
-def _as_naive_utc(dt: datetime) -> datetime:
-    from datetime import timezone
-    if dt.tzinfo is not None:
-        return dt.astimezone(timezone.utc).replace(tzinfo=None)
-    return dt
+# _as_naive_utc is now provided by utils.to_naive_utc (BUG-03 consolidation).
 
 
 def _build_x_and_masks(
@@ -115,7 +121,7 @@ def _build_x_and_masks(
         age_vec  (NUM_CHANNELS,)  – normalised ages in [0, 1]
         obs_mask (OBS_MASK_DIM,)  – 1 if fresh, 0 if stale / missing
     """
-    t = _as_naive_utc(issue_time)
+    t = to_naive_utc(issue_time)
     var_idx = {v: i for i, v in enumerate(VAR_NAMES)}
 
     x_vec    = np.zeros(X_DIM, dtype=np.float32)
@@ -127,13 +133,13 @@ def _build_x_and_masks(
     for obs in observations:
         if obs.zone_id != zone_id:
             continue
-        recv = _as_naive_utc(obs.received_at)
+        recv = to_naive_utc(obs.received_at)
         if recv > t:
             continue   # future-time input guard
         if obs.variable not in var_idx:
             continue
         idx = var_idx[obs.variable]
-        age = max(0.0, (t - _as_naive_utc(obs.observed_at)).total_seconds())
+        age = max(0.0, (t - to_naive_utc(obs.observed_at)).total_seconds())
         if age < ages_sec[idx]:
             ages_sec[idx] = age
             x_vec[idx] = float(obs.value)
@@ -160,6 +166,14 @@ def _build_d_and_tree_mask(
     Note: D is passed directly to the GRU even though it also enters the
     hypernetwork dynamic context. This dual-path is an explicit architectural
     requirement (P0 rule).
+
+    Design note on tree_mask:
+        The returned tree_mask is computed and returned for caller use, but is
+        intentionally NOT included in the 40-D U[z,t] GRU input vector
+        (assemble_u_vec). This was agreed with Person 3 when fixing embed_dim=16;
+        the 40-D layout is [X(6)|age(6)|obs_mask(6)|D(6)|H(16)]. If Person 2
+        or Person 3 require tree masks in the GRU input, U_DIM in config.py must
+        be updated and model checkpoints retrained.
     """
     d_vec      = np.zeros(D_DIM, dtype=np.float32)
     tree_mask  = np.zeros(TREE_MASK_DIM, dtype=np.float32)
@@ -244,16 +258,16 @@ class SequenceWindowAssembler:
         self._history_steps = history_steps
         self._horizons_sec  = horizons_sec or list(HORIZONS_SEC)
 
-        # Rolling buffers: {zone_id: deque-like list of U vecs}
-        self._buffer: Dict[str, List[np.ndarray]] = {
-            z: [] for z in self._zone_ids
+        # Rolling buffers: {zone_id: deque with maxlen=history_steps for O(1) append/drop}
+        self._buffer: Dict[str, deque] = {
+            z: deque(maxlen=self._history_steps) for z in self._zone_ids
         }
         self._last_step: Optional[int] = None
 
     def reset(self) -> None:
         """Clears all history buffers (call between scenarios)."""
         for z in self._zone_ids:
-            self._buffer[z].clear()
+            self._buffer[z] = deque(maxlen=self._history_steps)
         self._last_step = None
 
     def _validate_ordering(self, step: int) -> None:
@@ -295,7 +309,7 @@ class SequenceWindowAssembler:
             avail_obs = [
                 o for o in scenario.observations
                 if o.zone_id == z_id
-                and _as_naive_utc(o.received_at) <= _as_naive_utc(issue_time)
+                and to_naive_utc(o.received_at) <= to_naive_utc(issue_time)
             ]
 
             # Get latest tree output at or before issue_time
@@ -307,13 +321,11 @@ class SequenceWindowAssembler:
             # Assemble current U[z,t]
             u_vec = assemble_u_vec(z_id, issue_time, avail_obs, tree_out, h_emb)
 
-            # Append to rolling buffer
+            # Append to rolling deque (maxlen enforces window automatically)
             self._buffer[z_id].append(u_vec)
-            if len(self._buffer[z_id]) > self._history_steps:
-                self._buffer[z_id].pop(0)
 
             # Build padded history window
-            hist = self._buffer[z_id]
+            hist = list(self._buffer[z_id])
             if len(hist) < self._history_steps:
                 # Left-pad with the earliest available vector
                 pad_vec = hist[0]

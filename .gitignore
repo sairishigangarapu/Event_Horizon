@@ -50,3 +50,6 @@ data/*.db-wal
 
 # Hosted Studio generated state.
 data/studio_outputs/
+
+.DS_Store
+**/.DS_Store

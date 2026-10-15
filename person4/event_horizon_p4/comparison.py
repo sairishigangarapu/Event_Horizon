@@ -1,7 +1,8 @@
 """
 comparison.py – Target-aligned, unit-aware paired differences between Stream A and B.
 
-DISCLAIMER: Synthetic scaffold only. NOT for real-world use.
+NOTE: Forecast comparison module. Aligns forecasts and computes paired differences
+between Stream A and Stream B with causal filtering and unit mismatch detection.
 
 Contract:
   - Aligns forecasts on (scenario_id, zone_id, variable, unit, target_at).
@@ -15,11 +16,12 @@ Contract:
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Dict, List, Optional, Tuple
 
 from .config import STREAM_A_ID, STREAM_B_ID, VAR_NAMES, VAR_UNITS
 from .inference import ForecastRecord
+from .utils import to_naive_utc
 
 
 # ---------------------------------------------------------------------------
@@ -88,10 +90,7 @@ class ComparisonReport:
 # Alignment key type
 # ---------------------------------------------------------------------------
 
-def _naive_dt(dt: datetime) -> datetime:
-    if dt.tzinfo is not None:
-        return dt.astimezone(timezone.utc).replace(tzinfo=None)
-    return dt
+# _naive_dt is now provided by utils.to_naive_utc (BUG-03 consolidation).
 
 
 _AlignKey = Tuple[str, str, str, datetime]  # (scenario_id, zone_id, variable, target_at)
@@ -138,7 +137,7 @@ class ForecastComparator:
         # Build lookup for Stream A: key → ForecastRecord
         a_lookup: Dict[_AlignKey, ForecastRecord] = {}
         for rec in a_filtered:
-            key = (rec.scenario_id, rec.zone_id, rec.variable, _naive_dt(rec.target_at))
+            key = (rec.scenario_id, rec.zone_id, rec.variable, to_naive_utc(rec.target_at))
             # Last-write wins for same key (deterministic)
             a_lookup[key] = rec
 
@@ -147,7 +146,7 @@ class ForecastComparator:
         unit_skipped: List[Tuple[str, str, str]] = []
 
         for b_rec in b_filtered:
-            key = (b_rec.scenario_id, b_rec.zone_id, b_rec.variable, _naive_dt(b_rec.target_at))
+            key = (b_rec.scenario_id, b_rec.zone_id, b_rec.variable, to_naive_utc(b_rec.target_at))
 
             if key not in a_lookup:
                 # Stream A did not provide this channel
@@ -199,17 +198,10 @@ class ForecastComparator:
         if evaluation_time is None:
             return records
 
-        # Strip timezone if needed for comparison
-        def _naive(dt: datetime) -> datetime:
-            from datetime import timezone
-            if dt.tzinfo is not None:
-                return dt.astimezone(timezone.utc).replace(tzinfo=None)
-            return dt
-
-        et = _naive(evaluation_time)
+        et = to_naive_utc(evaluation_time)
         return [
             r for r in records
-            if _naive(r.issued_at) <= et and _naive(r.received_at) <= et
+            if to_naive_utc(r.issued_at) <= et and to_naive_utc(r.received_at) <= et
         ]
 
 

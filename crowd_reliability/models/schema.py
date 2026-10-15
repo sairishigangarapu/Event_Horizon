@@ -70,6 +70,9 @@ class ForecastRecord(Base):
     target_at = Column(DateTime, index=True, nullable=False)
     value = Column(Float, nullable=False)
     model_or_provider_version = Column(String, nullable=False)
+    channel_mask = Column(JSON, nullable=True)
+    applicability = Column(Float, nullable=True, default=1.0)
+    missing_data_mask = Column(JSON, nullable=True)
 
 class ReferenceStateRecord(Base):
     __tablename__ = "reference_states"

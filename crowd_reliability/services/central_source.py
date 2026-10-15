@@ -1,4 +1,5 @@
 import hashlib
+import json
 import os
 import pandas as pd
 from datetime import datetime, timedelta
@@ -60,9 +61,25 @@ class CentralSourceAdapter:
     provider is an independent, deliberately simple forecaster: it never reads
     simulator reference states, so it cannot see current or future truth.
     """
-    def __init__(self, mode: str = "replay", fixture_path: Optional[str] = None):
-        self.mode = mode
-        self.fixture_path = fixture_path
+    def __init__(
+        self,
+        mode: Optional[str] = None,
+        fixture_path: Optional[str] = None,
+        api_key: Optional[str] = None,
+    ):
+        try:
+            from crowd_reliability.config import settings
+            default_mode = getattr(settings, "central_source_mode", "replay")
+            default_fixture = getattr(settings, "central_forecast_path", None)
+            default_api_key = getattr(settings, "central_api_key", "")
+        except ImportError:
+            default_mode = "replay"
+            default_fixture = None
+            default_api_key = ""
+
+        self.mode = mode if mode is not None else default_mode
+        self.fixture_path = fixture_path or default_fixture
+        self.api_key = api_key if api_key is not None else default_api_key
         self.provider_version = CENTRAL_PROVIDER_VERSION
         self._cached_forecasts: List[ForecastRecord] = []
 
@@ -144,6 +161,9 @@ class CentralSourceAdapter:
                             target_at=t_issue + timedelta(seconds=h_sec),
                             value=round(max(0.0, val), 4),
                             model_or_provider_version=self.provider_version,
+                            channel_mask=[1] * 6,
+                            applicability=1.0,
+                            missing_data_mask=[0] * 6,
                         ))
 
         self._cached_forecasts = forecasts
@@ -164,7 +184,10 @@ class CentralSourceAdapter:
                 "received_at": f.received_at.isoformat(),
                 "target_at": f.target_at.isoformat(),
                 "value": f.value,
-                "model_or_provider_version": f.model_or_provider_version
+                "model_or_provider_version": f.model_or_provider_version,
+                "channel_mask": json.dumps(f.channel_mask) if f.channel_mask is not None else None,
+                "applicability": f.applicability,
+                "missing_data_mask": json.dumps(f.missing_data_mask) if f.missing_data_mask is not None else None,
             })
         df = pd.DataFrame(rows)
         df.to_csv(filepath, index=False)
@@ -172,23 +195,45 @@ class CentralSourceAdapter:
     def load_from_csv(self, filepath: str) -> List[ForecastRecord]:
         if not os.path.exists(filepath):
             return []
-        df = pd.read_csv(filepath)
+        try:
+            df = pd.read_csv(filepath)
+        except Exception as exc:
+            raise ValueError(f"Failed to read CSV at {filepath}: {exc}") from exc
+
+        required_cols = {
+            "forecast_id", "stream_id", "scenario_id", "zone_id",
+            "variable", "unit", "issued_at", "received_at",
+            "target_at", "value", "model_or_provider_version"
+        }
+        missing = required_cols - set(df.columns)
+        if missing:
+            raise ValueError(f"Malformed forecast CSV: missing required columns {sorted(missing)}")
+
         forecasts = []
-        for _, row in df.iterrows():
-            forecasts.append(
-                ForecastRecord(
-                    forecast_id=str(row["forecast_id"]),
-                    stream_id=str(row["stream_id"]),
-                    scenario_id=str(row["scenario_id"]),
-                    zone_id=str(row["zone_id"]),
-                    variable=str(row["variable"]),
-                    unit=str(row["unit"]),
-                    issued_at=datetime.fromisoformat(row["issued_at"]),
-                    received_at=datetime.fromisoformat(row["received_at"]),
-                    target_at=datetime.fromisoformat(row["target_at"]),
-                    value=float(row["value"]),
-                    model_or_provider_version=str(row["model_or_provider_version"])
+        for idx, row in df.iterrows():
+            try:
+                c_mask = json.loads(str(row["channel_mask"])) if "channel_mask" in row and pd.notna(row["channel_mask"]) else None
+                appl = float(row["applicability"]) if "applicability" in row and pd.notna(row["applicability"]) else 1.0
+                m_mask = json.loads(str(row["missing_data_mask"])) if "missing_data_mask" in row and pd.notna(row["missing_data_mask"]) else None
+                forecasts.append(
+                    ForecastRecord(
+                        forecast_id=str(row["forecast_id"]),
+                        stream_id=str(row["stream_id"]),
+                        scenario_id=str(row["scenario_id"]),
+                        zone_id=str(row["zone_id"]),
+                        variable=str(row["variable"]),
+                        unit=str(row["unit"]),
+                        issued_at=datetime.fromisoformat(str(row["issued_at"])),
+                        received_at=datetime.fromisoformat(str(row["received_at"])),
+                        target_at=datetime.fromisoformat(str(row["target_at"])),
+                        value=float(row["value"]),
+                        model_or_provider_version=str(row["model_or_provider_version"]),
+                        channel_mask=c_mask,
+                        applicability=appl,
+                        missing_data_mask=m_mask,
+                    )
                 )
-            )
+            except Exception as exc:
+                raise ValueError(f"Malformed row {idx} in {filepath}: {exc}") from exc
         self._cached_forecasts = forecasts
         return forecasts

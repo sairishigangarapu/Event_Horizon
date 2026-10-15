@@ -79,7 +79,7 @@ def ingest_dataset(
     eval_step_s: int = DEFAULT_EVAL_STEP_S,
     sim_dt_s: float = 0.1,
     anchor: datetime = DEFAULT_ANCHOR,
-    clear_existing: bool = True,
+    clear_existing: bool = False,
 ) -> Dict[str, Any]:
     """
     Loads zones + observations + reference states from the dataset into the DB.

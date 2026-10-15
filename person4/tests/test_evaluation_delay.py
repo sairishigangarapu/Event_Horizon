@@ -7,6 +7,7 @@ Validates:
   - n_label_wait and n_matched counts are accurate.
   - Exit classification metrics are computed separately.
   - MAE/RMSE are computed correctly on matched numeric pairs.
+  - export_metrics_csv() writes correct columns, rows, and empty fields.
 """
 
 from __future__ import annotations
@@ -15,7 +16,11 @@ import math
 import pytest
 from datetime import datetime, timedelta, timezone
 
-from person4.event_horizon_p4.evaluation import ReferenceEvaluator, EvaluationReport
+from person4.event_horizon_p4.evaluation import (
+    ReferenceEvaluator,
+    EvaluationReport,
+    export_metrics_csv,
+)
 from person4.event_horizon_p4.inference import ForecastRecord
 from person4.event_horizon_p4.synthetic import MockReferenceState
 from person4.event_horizon_p4.config import VAR_UNITS
@@ -221,3 +226,99 @@ class TestExitClassificationMetrics:
         # exit_cls contains ExitMetrics with horizon_sec (not a .variable field)
         assert all(hasattr(m, "horizon_sec") for m in report.exit_cls)
         assert all(hasattr(m, "brier_score") for m in report.exit_cls)
+
+
+# ---------------------------------------------------------------------------
+# export_metrics_csv correctness  (BACKLOG-03)
+# ---------------------------------------------------------------------------
+
+class TestExportMetricsCsv:
+    """Validates the CSV export helper: columns, row counts, and field discipline."""
+
+    def _build_mixed_report(self) -> EvaluationReport:
+        """Creates an EvaluationReport containing one numeric and one exit metric."""
+        avail  = _BASE
+        eval_t = _BASE + timedelta(minutes=5)
+        fc  = [
+            _fc("zone_00", "density",   _T30, 2.0),
+            _fc("zone_04", "exit_open", _T30, 0.9),
+        ]
+        ref = [
+            _ref("zone_00", "density",   _T30, 1.0, label_available_at=avail),
+            _ref("zone_04", "exit_open", _T30, 1.0, label_available_at=avail),
+        ]
+        return ReferenceEvaluator().score(fc, ref, evaluation_time=eval_t)
+
+    def test_csv_contains_required_columns(self, tmp_path):
+        """All eight expected columns must appear in the header row."""
+        import csv
+        report   = self._build_mixed_report()
+        out_path = str(tmp_path / "metrics.csv")
+        export_metrics_csv(report, out_path)
+
+        with open(out_path, newline="") as f:
+            reader  = csv.DictReader(f)
+            columns = reader.fieldnames or []
+
+        expected = {"metric_type", "variable", "horizon_sec", "n",
+                    "mae", "rmse", "accuracy", "brier_score"}
+        assert expected <= set(columns), (
+            f"Missing columns: {expected - set(columns)}"
+        )
+
+    def test_csv_row_count_matches_report(self, tmp_path):
+        """Total rows must equal len(numeric) + len(exit_cls)."""
+        import csv
+        report   = self._build_mixed_report()
+        out_path = str(tmp_path / "metrics_count.csv")
+        export_metrics_csv(report, out_path)
+
+        with open(out_path, newline="") as f:
+            rows = list(csv.DictReader(f))
+
+        assert len(rows) == len(report.numeric) + len(report.exit_cls)
+
+    def test_numeric_rows_have_empty_accuracy_and_brier(self, tmp_path):
+        """Numeric rows must leave accuracy and brier_score blank."""
+        import csv
+        report   = self._build_mixed_report()
+        out_path = str(tmp_path / "metrics_num.csv")
+        export_metrics_csv(report, out_path)
+
+        with open(out_path, newline="") as f:
+            rows = list(csv.DictReader(f))
+
+        numeric_rows = [r for r in rows if r["metric_type"] == "numeric"]
+        assert len(numeric_rows) >= 1, "Expected at least one numeric row"
+        for row in numeric_rows:
+            assert row["accuracy"]    == "", "Numeric row must not populate accuracy"
+            assert row["brier_score"] == "", "Numeric row must not populate brier_score"
+
+    def test_exit_rows_have_empty_mae_and_rmse(self, tmp_path):
+        """Exit classification rows must leave mae and rmse blank."""
+        import csv
+        report   = self._build_mixed_report()
+        out_path = str(tmp_path / "metrics_exit.csv")
+        export_metrics_csv(report, out_path)
+
+        with open(out_path, newline="") as f:
+            rows = list(csv.DictReader(f))
+
+        exit_rows = [r for r in rows if r["metric_type"] == "exit_classification"]
+        assert len(exit_rows) >= 1, "Expected at least one exit_classification row"
+        for row in exit_rows:
+            assert row["mae"]  == "", "Exit row must not populate mae"
+            assert row["rmse"] == "", "Exit row must not populate rmse"
+
+    def test_csv_is_idempotent_on_rewrite(self, tmp_path):
+        """Writing the same report twice to the same path produces identical output."""
+        import csv
+        report   = self._build_mixed_report()
+        out_path = str(tmp_path / "metrics_idem.csv")
+        export_metrics_csv(report, out_path)
+        with open(out_path) as f:
+            first = f.read()
+        export_metrics_csv(report, out_path)
+        with open(out_path) as f:
+            second = f.read()
+        assert first == second, "Re-writing the same report must produce identical CSV"

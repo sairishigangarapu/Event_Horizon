@@ -93,7 +93,9 @@ class ForecastComparator:
         evaluated_at: datetime,
         zone_id: str,
         variable: str,
-        target_ref_id: str = "obs_eval"
+        target_ref_id: str = "obs_eval",
+        zone_type: Optional[str] = None,
+        scenario_type: Optional[str] = None,
     ) -> AssessmentRecord:
         """
         Assesses evidence freshness, coverage, and report conflicts for a specific zone and variable.
@@ -148,7 +150,9 @@ class ForecastComparator:
         # Variable/scenario-aware freshness thresholds (P2): event-driven states go
         # stale faster than bulk density. Density keeps its 45s boundary.
         thresholds_obj = DEFAULT_FRESHNESS_THRESHOLDS
-        recent_th, outdated_th = thresholds_obj.for_variable(variable)
+        recent_th, outdated_th = thresholds_obj.for_variable(
+            variable, zone_type=zone_type, scenario_type=scenario_type
+        )
         is_stale = age_sec > outdated_th
         coverage = 1.0 if not is_stale else max(0.1, 1.0 - (age_sec - outdated_th) / 100.0)
 

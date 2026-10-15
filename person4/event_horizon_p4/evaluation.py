@@ -1,7 +1,8 @@
 """
 evaluation.py – Delayed reference scoring: MAE/RMSE + exit classification metrics.
 
-DISCLAIMER: Synthetic scaffold only. NOT for real-world use.
+NOTE: Reference evaluation and metrics module. Enforces label availability
+delay gates and produces separated numeric and exit classification metrics.
 
 Contract:
   - Reference metrics are calculated ONLY after label_available_at time.
@@ -17,12 +18,13 @@ from __future__ import annotations
 
 from collections import defaultdict
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 
 from .config import HORIZONS_SEC, VAR_NAMES, VAR_UNITS
+from .utils import to_naive_utc
 from .inference import ForecastRecord
 from .synthetic import MockReferenceState
 
@@ -91,10 +93,7 @@ class EvaluationReport:
 # Reference lookup helper
 # ---------------------------------------------------------------------------
 
-def _as_naive(dt: datetime) -> datetime:
-    if dt.tzinfo is not None:
-        return dt.astimezone(timezone.utc).replace(tzinfo=None)
-    return dt
+# _as_naive is now provided by utils.to_naive_utc (BUG-03 consolidation).
 
 
 def build_reference_lookup(
@@ -112,7 +111,7 @@ def build_reference_lookup(
             ref.scenario_id,
             ref.zone_id,
             ref.variable,
-            _as_naive(ref.state_at),
+            to_naive_utc(ref.state_at),
         )
         lookup[key] = ref
     return lookup
@@ -150,7 +149,7 @@ class ReferenceEvaluator:
             EvaluationReport with separate numeric and exit metrics.
         """
         ref_lookup = build_reference_lookup(reference_states)
-        et = _as_naive(evaluation_time) if evaluation_time else None
+        et = to_naive_utc(evaluation_time) if evaluation_time else None
 
         # Accumulate per (variable, horizon_sec)
         # For numeric: lists of (pred, true)
@@ -167,7 +166,7 @@ class ReferenceEvaluator:
                 fc.scenario_id,
                 fc.zone_id,
                 fc.variable,
-                _as_naive(fc.target_at),
+                to_naive_utc(fc.target_at),
             )
             ref = ref_lookup.get(key)
 
@@ -176,7 +175,7 @@ class ReferenceEvaluator:
                 continue
 
             # Enforce label availability delay
-            ref_avail = _as_naive(ref.label_available_at)
+            ref_avail = to_naive_utc(ref.label_available_at)
             if et is not None and ref_avail > et:
                 n_label_wait += 1
                 continue
