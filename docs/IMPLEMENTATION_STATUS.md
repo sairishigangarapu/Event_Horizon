@@ -10,14 +10,14 @@
 - **Only the decision-tree bank is trained.** The hypernetwork, GNN and GRU run with untrained initial weights, and the active manifest says so.
 - **The training and feedback loop does not exist yet.** There is no joint spatial and temporal training, no candidate copy, no validation gate and no promotion.
 - **Several finished modules are not connected to the running app.** These are the canonical reliability engine, the whole `person4/` package, Person 1's v0.2 simulator, the starter-scenario loader and the out-of-sample tree predictions.
-- **Some known critical defects are still in the code.** The GRU is never put in eval mode, no readiness gate exists, and the central fixture reads future truth. Section 6 lists them all.
+- **The critical serving defects were fixed on 15 October.** Forecasts are deterministic, Stream A no longer reads truth, missing artifacts fail loudly, the API and pipeline share one tree bank, and untrained stages are labelled experimental everywhere. Section 6 lists what remains.
 - **The product layer is the thinnest part.** The README is still a template, there is no container for the main app, and the dashboard reads SQLite directly instead of calling the API.
 
 ### Test results (run today on a throwaway database)
 
 | Suite | Result |
 |---|---|
-| `MKCrusaders26/tests` (main + Twin Studio host tests) | 269 passed, 0 failed (after the 15 October test fixes) |
+| `MKCrusaders26/tests` (main + Twin Studio host tests) | 293 passed, 0 failed (after the 15 October fixes). A clean export without the uncommitted Twin Studio files: 122 passed. |
 | `MKCrusaders26/person4/tests` | 47 passed |
 | `event_horizon_member1_v0.2/tests` | 39 passed |
 | `tests/twin_phase4_integration` (live MinIO + network probe) | Not run. It needs Docker, and drive C: is full. |
@@ -67,8 +67,8 @@ flowchart TD
     end
 
     subgraph P4["Person 4: forecast and evaluation"]
-        GRU["GRU forecaster<br/>untrained, no eval mode"]:::warn
-        CENT["Central fixture Stream A<br/>reads future truth"]:::warn
+        GRU["GRU forecaster<br/>untrained, deterministic"]:::warn
+        CENT["Central fixture Stream A<br/>observations only"]:::ok
         CMP["align_and_compare"]:::ok
         EVAL["EvaluationService<br/>ignores label delay"]:::warn
         P4PKG["person4/ package<br/>47 tests, mock checkpoint"]:::orphan
@@ -99,7 +99,7 @@ flowchart TD
     TB -->|"D direct"| GRU
     DB -->|"X, ages, masks"| GRU
     GRU --> DB
-    REF --> CENT --> DB
+    DB -->|"observations only"| CENT --> DB
     DB --> CMP --> API
     DB --> EVAL --> API
     DB --> CMPA --> API
@@ -146,7 +146,7 @@ flowchart TD
 |---|---|---|---|
 | Six-channel tree bank `dt_bank_v2` with scaler `scaler_obs_only_v1` | Yes | Yes | Fitted by `seed-demo` on all three presets, which is in-sample. Pickled with scikit-learn 1.9.1, while this machine runs 1.7.2. |
 | Observed-only feature schema and as-of snapshots | Yes | Yes | `ml/features.py`, `ml/trees.py`. |
-| `infer_tree_vector` and the `/tree-outputs` route | Yes | Yes | The API loads `models/trees/tree_bank_dt_bank_v2.joblib`, but the pipeline loads `models/production/tree_bank.joblib`. The two files differ and both are labelled `dt_bank_v2`. |
+| `infer_tree_vector` and the `/tree-outputs` route | Yes | Yes | Since 15 October the API and the pipeline both load the hash-verified `models/production/tree_bank.joblib` through `load_verified_tree_bank`. `models/trees/` holds training artifacts only. |
 | `train-trees`, `mc-refit`, `benchmark-trees`, `export-tree-vector` | Yes | CLI only | Three Monte Carlo runs and benchmarks are saved. |
 | Out-of-sample tree predictions | Yes | No | `models/trees/mc/oos_predictions.jsonl` exists. No spatial or temporal training reads it. |
 | Reliability engine: freshness thresholds, dedupe, conflicts, conflict graph, coverage, five labels | Yes | No | `crowd_reliability/reliability/`. The canonical `assess_information`, `compute_coverage` and `build_conflict_graph` are used only by tests. |
@@ -172,9 +172,9 @@ flowchart TD
 
 | Item | Implemented | Connected | Notes |
 |---|---|---|---|
-| GRU forecaster with 5 numeric heads and 1 exit head, 3 horizons | Yes | Yes | `ml/temporal.py`. Untrained, and stays in train mode, so dropout makes forecasts non-deterministic. |
+| GRU forecaster with 5 numeric heads and 1 exit head, 3 horizons | Yes | Yes | `ml/temporal.py`. Untrained. Runs in eval mode, so forecasts are deterministic (fixed 15 October). |
 | U[z,t] = raw, age, mask, D, H (40 dims) | Yes | Yes | Tree masks and the exit-applicability mask are not in U, although the architecture asks for them. History is fixed at 12 steps. `LOOKBACK_STEPS` in `.env` is ignored. |
-| Central fixture (Stream A) | Yes | Yes | `services/central_source.py` blends current truth with the truth at the target time. That leaks future ground truth into Stream A. |
+| Central fixture (Stream A) | Yes | Yes | `services/central_source.py`. Since 15 October it uses only reports received by each issue time: a smoothed level held across horizons, with no forecast where no recent report exists. It no longer reads reference states. |
 | Stream A/B alignment and signed and absolute differences | Yes | Yes | `services/comparator.py` `align_and_compare`, used by `/api/forecasts` and the dashboard. |
 | Reference-based scoring (MAE, RMSE, exit accuracy) | Yes | Yes | `services/evaluator.py`. It ignores `label_available_at`, so it does not model delayed labels. |
 | `person4/` package: sequences, masked loss, training, inference, baselines, comparison, delayed-label evaluation | Yes | No | 47 tests pass. Nothing in the app imports it. Its checkpoint is a mock with 39 inputs and 6 zones, which no longer matches its own config of 40 and 8. Its central adapter defaults to the truth-derived CSV. |
@@ -186,12 +186,12 @@ flowchart TD
 | Item | Implemented | Connected | Notes |
 |---|---|---|---|
 | FastAPI app | Yes | Yes | 8 routes, listed in section 5. |
-| Streamlit dashboard `dashboard/app.py` | Yes | Partly | Five tabs. It reads SQLite directly instead of calling the API. Ground truth is shown by default. It assesses only the final timestamp. Only `crowd_surge` has forecasts to show. |
+| Streamlit dashboard `dashboard/app.py` | Yes | Partly | Five tabs. It reads SQLite directly instead of calling the API. Ground truth is shown by default. It assesses only the final timestamp. All three scenarios have forecasts after `seed-serving`. |
 | Twin Studio dashboard page | Yes | Yes | Reads evaluator output files and reveals labels only on a button press. |
-| Health endpoint | Partly | Yes | Reports only whether the tree bank is loaded. It says nothing about the untrained neural stages. |
+| Health endpoint | Yes | Yes | Reports the tree bank, every neural stage's training status, the serving mode (`experimental` today), strict-mode setting and any artifact errors. |
 | CSV/JSON export | No | No | |
-| Local database seeding | Yes | Not run here | `data/app.db` does not exist, so the API and dashboard are empty until `seed-demo` runs. `seed-demo` also rewrites `models/production`. |
-| Container for the main app | No | No | The only Dockerfile and Compose file are for Twin Studio services. |
+| Local database seeding | Yes | Not run here | `data/app.db` does not exist on this machine. `seed-serving` seeds all three scenarios from the committed models without writing to `models/production`, and the dashboard's seed button now uses it. `seed-demo` still retrains and rewrites `models/production`. |
+| Container for the main app | Yes | Not built yet | Root `Dockerfile` for a Hugging Face Docker Space: nginx on 7860 in front of FastAPI and Streamlit, database seeded at build time with `seed-serving`. A GitHub Actions workflow runs the tests and mirrors the Space on pushes to `main`. Not built locally because Docker is unavailable here. |
 | README | Partly | Not applicable | Still the template with "TO COMPLETE" fields and "not a runnable application", plus an audit section. |
 | Round 1 and Round 2 objectives documents, demo script | No | No | |
 
@@ -220,7 +220,7 @@ flowchart TD
 
 | Planned route (workload plan section G) | In code |
 |---|---|
-| `GET /health` with a model-loaded flag | Present. Covers the tree bank only. |
+| `GET /health` with a model-loaded flag | Present. Includes per-stage readiness. |
 | `GET /api/scenarios` | Present |
 | `POST /api/scenarios/{id}/step` | **Missing** |
 | `GET /api/scenarios/{id}/observations?as_of=` | **Missing** |
@@ -237,12 +237,12 @@ Each item was checked in the source on 15 October, not copied from older docs.
 
 | # | Severity | Defect | Where | Owner |
 |---|---|---|---|---|
-| 1 | Critical | The untrained neural stack is served as active. No readiness gate checks `training_status`. | `ml/pipeline.py` `load_pipeline` | P3, P4 |
-| 2 | Critical | The GRU is never put in eval mode, so identical inputs give different forecasts. Twin Studio works around it locally. | `ml/temporal.py` `load`, `ml/pipeline.py` `step` | P4 |
-| 3 | Critical | If an artifact is missing, the pipeline loads silently and the unfitted bank returns heuristic values with mask 1. | `ml/pipeline.py` `load_pipeline`, `ml/tree_bank.py` `predict_zone` | P2, P3 |
-| 4 | Critical | The central fixture reads truth at the target time, so Stream A has an unfair advantage and the A/B comparison is not valid. | `services/central_source.py` | P4 |
+| 1 | Fixed | Untrained neural stages were served without any label. Fixed 15 October: readiness is assessed from the manifest, shown in `/health`, `/api/manifest`, `/api/forecasts` and the dashboard, and `REQUIRE_VALIDATED_MODELS=true` refuses unvalidated forecasts. | `models/manifest.py`, `api.py`, `dashboard/app.py` | P3, P4, P5 |
+| 2 | Fixed | The GRU was never put in eval mode, so identical inputs gave different forecasts. Fixed 15 October in `load`, `__init__` and `step`, with regression tests. | `ml/temporal.py`, `ml/pipeline.py` | P4 |
+| 3 | Fixed | A missing artifact loaded silently. Fixed 15 October: every artifact is required and hash-verified, tree and scaler versions must match the manifest, and an unfitted bank can be neither saved nor served. An unloaded in-memory pipeline still uses the heuristic bank, which only tests and experiments create. | `ml/pipeline.py`, `api.py` | P2, P3 |
+| 4 | Fixed | The central fixture read truth at the target time. Fixed 15 October: Stream A is now an observation-only smoothed forecast, and `data/demo/central_forecast.csv` was regenerated. | `services/central_source.py` | P4 |
 | 5 | High | Stale generator reports derive their value from current truth under a back-dated timestamp. | `simulation/generator.py` | P1 |
-| 6 | High | The API and the pipeline load two different tree-bank files that carry the same version label. | `api._load_tree_bank`, `pipeline.load_pipeline` | P2, P5 |
+| 6 | Fixed | The API and the pipeline loaded two different tree-bank files. Fixed 15 October: both use the manifest-verified production bank. | `api._load_tree_bank`, `ml/pipeline.load_verified_tree_bank` | P2, P5 |
 | 7 | High | The served assessment bypasses the canonical reliability engine. | `services/comparator.py`, `api.py`, `dashboard/app.py` | P2, P5 |
 | 8 | High | Tree outputs and forecasts have no missing-data mask, and schemas have no unit column for tree channels. | `ml/tree_bank.py`, `models/schema.py` | P2, P4 |
 | 9 | Medium | The evaluator ignores `label_available_at`. | `services/evaluator.py` | P4 |
@@ -274,23 +274,23 @@ Points to act on:
 ## 8. What remains to be built, by scope gate
 
 ### Gate P0: minimum judgeable product
-1. Fix defects 2, 3 and 4 so that forecasts are deterministic, missing artifacts fail loudly, and Stream A no longer reads future truth.
+1. Done: defects 2, 3 and 4 are fixed.
 2. Route `/api/assessments` and the dashboard through `reliability.assess_information`, and delete the reimplementation.
-3. Make one tree-bank file canonical for both the API and the pipeline.
-4. Generate forecasts and a central fixture for all three scenarios, not only `crowd_surge`.
+3. Done: one tree-bank file is canonical for both the API and the pipeline.
+4. Done: `seed-serving` generates both streams for all three scenarios.
 5. Turn the truth reveal off by default.
-6. Seed the database on the demo machine and confirm the full flow once.
+6. Run `seed-serving` on the demo machine or in the image build, and confirm the full flow once.
 
 ### Gate P1: substantially functional product
 1. Train the GRU together with the hypernetwork and GNN on scenario-split data that uses the out-of-sample tree predictions. Save the checkpoint and record its status in the manifest.
-2. Add a readiness gate that labels or refuses untrained stages, and make `/health` report every stage's status.
+2. Done: readiness labelling and the optional strict mode exist. Training the neural stages, which would make the app `validated`, is still open.
 3. Decide between `crowd_reliability/ml/temporal.py` and `person4/`. Either import `person4` into the pipeline or port its masked loss, baselines and delayed-label evaluation. Then remove the stale mock checkpoint.
 4. Add the missing routes: scenario step and reset, observations as-of, forecasts as-of, and CSV/JSON export.
 5. Make the dashboard call the API, and add scenario playback controls.
 6. Add missing-data masks and tree-channel units to the records.
 7. Gate evaluation on `label_available_at`.
 8. Add a training and inference notebook.
-9. Rewrite the README with real commands and results, and add a container for the main app.
+9. Rewrite the README with real commands and results. The container and deploy workflow exist; build and publish them once Docker or the Space is available.
 10. Commit the Twin Studio work, then run its live MinIO suite after freeing disk space on C:.
 
 ### Gate P2: advanced features
