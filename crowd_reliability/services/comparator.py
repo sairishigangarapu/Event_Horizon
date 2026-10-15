@@ -1,5 +1,6 @@
 from datetime import datetime, timezone, timedelta
 from typing import List, Dict, Tuple, Any, Optional
+from crowd_reliability.contracts import utc
 from crowd_reliability.models.schema import ForecastRecord, ObservationRecord, AssessmentRecord
 from crowd_reliability.reliability.conflicts import deduplicate_reports, detect_conflicts
 from crowd_reliability.reliability.freshness import (
@@ -43,33 +44,22 @@ class ForecastComparator:
         cent_forecasts: List[ForecastRecord],
         as_of_time: Optional[datetime] = None
     ) -> List[ComparisonResult]:
-        # Filter by as_of_time if provided (only use forecasts received by as_of_time)
-        if as_of_time:
-            arch_pool = [f for f in arch_forecasts if f.received_at <= as_of_time]
-            cent_pool = [f for f in cent_forecasts if f.received_at <= as_of_time]
-        else:
-            arch_pool = arch_forecasts
-            cent_pool = cent_forecasts
-
-        def norm_ts(dt: datetime) -> int:
-            if dt.tzinfo is not None:
-                dt = dt.astimezone(timezone.utc).replace(tzinfo=None)
-            epoch = datetime(2026, 1, 1)
-            return int(round((dt - epoch).total_seconds() / 5.0) * 5)
-
-        # Map by (zone_id, variable, norm_target_at)
-        arch_map: Dict[Tuple[str, str, int], ForecastRecord] = {
-            (f.zone_id, f.variable, norm_ts(f.target_at)): f for f in arch_pool
-        }
-        cent_map: Dict[Tuple[str, str, int], ForecastRecord] = {
-            (f.zone_id, f.variable, norm_ts(f.target_at)): f for f in cent_pool
-        }
-
-        all_keys = set(arch_map.keys()).union(set(cent_map.keys()))
+        def index(records):
+            out={}
+            for f in records:
+                if as_of_time and (utc(f.received_at)>utc(as_of_time) or utc(f.issued_at)>utc(as_of_time)):continue
+                if utc(f.issued_at)>utc(f.received_at) or utc(f.issued_at)>=utc(f.target_at):raise ValueError('Invalid forecast timestamps.')
+                # Exact physical quantity and target; latest available revision wins.
+                key=(f.scenario_id,f.zone_id,f.variable,f.unit,utc(f.issued_at),utc(f.target_at))
+                rank=(utc(f.issued_at),utc(f.received_at),str(f.forecast_id))
+                if key not in out or rank>out[key][0]:out[key]=(rank,f)
+            return {k:v[1] for k,v in out.items()}
+        arch_map=index(arch_forecasts);cent_map=index(cent_forecasts)
+        all_keys=set(arch_map)|set(cent_map)
         results: List[ComparisonResult] = []
 
         for key in sorted(all_keys):
-            z_id, var, t_norm = key
+            _, z_id, var, _, _, _ = key
             arch_f = arch_map.get(key)
             cent_f = cent_map.get(key)
             t_target = arch_f.target_at if arch_f else cent_f.target_at
@@ -113,7 +103,7 @@ class ForecastComparator:
         """
         zone_var_obs = [
             o for o in observations
-            if o.zone_id == zone_id and o.variable == variable and o.received_at <= evaluated_at
+            if o.zone_id == zone_id and o.variable == variable and utc(o.received_at) <= utc(evaluated_at) and utc(o.observed_at) <= utc(evaluated_at)
         ]
 
         missing_flags = {

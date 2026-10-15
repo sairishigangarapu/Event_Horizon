@@ -1,3 +1,9 @@
+# Windows rendering and audited pipeline update
+
+Read [FIXES_AND_TRAINING.md](FIXES_AND_TRAINING.md) for the corrected launcher, implemented audit fixes, selected synthetic model and limitations. Older audit/status sections below describe earlier snapshots.
+
+> **Integrated Studio + Runtime:** start with [START_HERE.md](START_HERE.md). Double-click the top-level START_WINDOWS.bat. The original backend documentation follows.
+
 # Crowd Disaster Information Reliability
 ## Hackathon README — implementation-aligned template
 

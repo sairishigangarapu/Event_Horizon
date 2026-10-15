@@ -1,0 +1,142 @@
+{
+  "zones": [
+    {
+      "zone_id": "ent_a",
+      "name": "Entrance North",
+      "zone_type": "entrance",
+      "capacity_definition": 150.0,
+      "area_m2": 60.0,
+      "has_exit": false,
+      "x": 100,
+      "y": 100
+    },
+    {
+      "zone_id": "ent_b",
+      "name": "Entrance South",
+      "zone_type": "entrance",
+      "capacity_definition": 150.0,
+      "area_m2": 60.0,
+      "has_exit": false,
+      "x": 100,
+      "y": 300
+    },
+    {
+      "zone_id": "corridor_1",
+      "name": "North Corridor",
+      "zone_type": "corridor",
+      "capacity_definition": 100.0,
+      "area_m2": 40.0,
+      "has_exit": false,
+      "x": 250,
+      "y": 120
+    },
+    {
+      "zone_id": "corridor_2",
+      "name": "South Corridor",
+      "zone_type": "corridor",
+      "capacity_definition": 100.0,
+      "area_m2": 40.0,
+      "has_exit": false,
+      "x": 250,
+      "y": 280
+    },
+    {
+      "zone_id": "concourse",
+      "name": "Central Concourse",
+      "zone_type": "assembly",
+      "capacity_definition": 400.0,
+      "area_m2": 150.0,
+      "has_exit": false,
+      "x": 400,
+      "y": 200
+    },
+    {
+      "zone_id": "stair_1",
+      "name": "Stairway East",
+      "zone_type": "stairway",
+      "capacity_definition": 80.0,
+      "area_m2": 30.0,
+      "has_exit": false,
+      "x": 550,
+      "y": 120
+    },
+    {
+      "zone_id": "exit_1",
+      "name": "Emergency Exit 1",
+      "zone_type": "exit",
+      "capacity_definition": 120.0,
+      "area_m2": 50.0,
+      "has_exit": true,
+      "x": 550,
+      "y": 280
+    },
+    {
+      "zone_id": "exit_2",
+      "name": "Main East Exit",
+      "zone_type": "exit",
+      "capacity_definition": 150.0,
+      "area_m2": 60.0,
+      "has_exit": true,
+      "x": 700,
+      "y": 120
+    }
+  ],
+  "connections": [
+    {
+      "edge_id": "e_ent_a_corr1",
+      "from_zone": "ent_a",
+      "to_zone": "corridor_1",
+      "width_m": 3.5,
+      "direction": "unidirectional",
+      "distance_m": 25.0
+    },
+    {
+      "edge_id": "e_ent_b_corr2",
+      "from_zone": "ent_b",
+      "to_zone": "corridor_2",
+      "width_m": 3.5,
+      "direction": "unidirectional",
+      "distance_m": 25.0
+    },
+    {
+      "edge_id": "e_corr1_conc",
+      "from_zone": "corridor_1",
+      "to_zone": "concourse",
+      "width_m": 4.0,
+      "direction": "unidirectional",
+      "distance_m": 30.0
+    },
+    {
+      "edge_id": "e_corr2_conc",
+      "from_zone": "corridor_2",
+      "to_zone": "concourse",
+      "width_m": 4.0,
+      "direction": "unidirectional",
+      "distance_m": 30.0
+    },
+    {
+      "edge_id": "e_conc_exit1",
+      "from_zone": "concourse",
+      "to_zone": "exit_1",
+      "width_m": 3.0,
+      "direction": "unidirectional",
+      "distance_m": 20.0
+    },
+    {
+      "edge_id": "e_conc_stair1",
+      "from_zone": "concourse",
+      "to_zone": "stair_1",
+      "width_m": 2.5,
+      "direction": "unidirectional",
+      "distance_m": 25.0
+    },
+    {
+      "edge_id": "e_stair1_exit2",
+      "from_zone": "stair_1",
+      "to_zone": "exit_2",
+      "width_m": 3.0,
+      "direction": "unidirectional",
+      "distance_m": 20.0
+    }
+  ]
+}

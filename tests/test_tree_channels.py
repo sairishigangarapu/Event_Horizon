@@ -50,7 +50,7 @@ def _snapshot() -> TreeSnapshot:
                 "zone_id": zone,
                 "source_id": "cam_1",
                 "variable": var,
-                "value": 1.5,
+                "value": 1.0 if var == "exit_open" else 1.5,
                 "observed_at": T_BASE - timedelta(seconds=10),
                 "received_at": T_BASE - timedelta(seconds=8),
             })

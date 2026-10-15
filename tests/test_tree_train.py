@@ -36,7 +36,7 @@ def _ref(scenario, zone, var, value, t):
 
 def _obs(scenario, zone, var, value, t):
     return {
-        "report_id": f"r_{scenario}_{zone}_{var}",
+        "report_id": f"r_{scenario}_{zone}_{var}_{t.isoformat()}",
         "scenario_id": scenario, "zone_id": zone, "source_id": "cam_1",
         "variable": var, "value": value,
         "observed_at": t, "received_at": t,
@@ -68,7 +68,8 @@ def test_train_tree_bank_deterministic_same_seed():
     obs = []
     for i in range(30):
         t = T_BASE + timedelta(seconds=5 * i)
-        refs.append(_ref("s1", "concourse", "density", 1.0 + 0.1 * i, t))
+        for var in ("density","speed","inflow","outflow","queue_length"):
+            refs.append(_ref("s1", "concourse", var, 1.0 + 0.1 * i, t))
         obs.append(_obs("s1", "concourse", "density", 1.0 + 0.1 * i, t))
 
     bank_a, scaler_a, meta_a = train_tree_bank(obs, refs, ZONE_FLAGS, seed=42)

@@ -1,5 +1,7 @@
 import random
 import uuid
+import hashlib
+import bisect
 from datetime import datetime, timezone, timedelta
 from typing import List, Dict, Tuple, Any
 from crowd_reliability.models.schema import ReferenceStateRecord, ObservationRecord
@@ -31,6 +33,8 @@ class ObservationGenerator:
         self.rng = random.Random(scenario.seed + 101)
         observations: List[ObservationRecord] = []
 
+        history={}
+        for ref in sorted(ref_records,key=lambda r:r.state_at):history.setdefault((ref.zone_id,ref.variable),[]).append(ref)
         # Group reference records by (zone_id, variable, state_at)
         for ref in ref_records:
             # Skip non-applicable exit_open records (value == -1.0)
@@ -61,7 +65,8 @@ class ObservationGenerator:
                 noise = self.rng.gauss(0.0, 0.08 * max(0.5, ref.value))
                 val = max(0.0, ref.value + noise)
 
-            report_id = f"rep_{uuid.uuid4().hex[:10]}"
+            stable = hashlib.sha256(f"{scenario.scenario_id}|{ref.zone_id}|{ref.variable}|{ref.state_at.isoformat()}".encode()).hexdigest()[:20]
+            report_id = "rep_"+stable
             obs = ObservationRecord(
                 report_id=report_id,
                 scenario_id=ref.scenario_id,
@@ -81,20 +86,14 @@ class ObservationGenerator:
             if self.rng.random() < scenario.stale_report_probability:
                 stale_age_sec = self.rng.uniform(45.0, 120.0)
                 stale_observed_at = observed_at - timedelta(seconds=stale_age_sec)
-                stale_val = max(0.0, ref.value * self.rng.uniform(0.3, 0.7))
-                stale_obs = ObservationRecord(
-                    report_id=f"rep_stale_{uuid.uuid4().hex[:8]}",
-                    scenario_id=ref.scenario_id,
-                    zone_id=ref.zone_id,
-                    source_id=f"{primary_source}_delayed",
-                    variable=ref.variable,
-                    value=round(stale_val, 4),
-                    unit=ref.unit,
-                    observed_at=stale_observed_at,
-                    published_at=published_at,
-                    received_at=received_at
-                )
-                observations.append(stale_obs)
+                past=[r for r in history[(ref.zone_id,ref.variable)] if r.state_at<=stale_observed_at]
+                if past:
+                    historic=past[-1]
+                    # Replay an actual earlier measurement with delayed receipt.
+                    observations.append(ObservationRecord(
+                        report_id="rep_stale_"+stable,scenario_id=ref.scenario_id,zone_id=ref.zone_id,
+                        source_id=f"{primary_source}_delayed",variable=ref.variable,value=historic.value,
+                        unit=ref.unit,observed_at=historic.state_at,published_at=published_at,received_at=received_at))
 
             # Generate Conflict condition:
             # A secondary source (e.g. manual warden) reports contradictory info
@@ -105,12 +104,12 @@ class ObservationGenerator:
                 else:
                     conflicting_val = round(val * self.rng.choice([0.4, 2.2]), 3)
 
-                conf_obs_at = observed_at + timedelta(seconds=self.rng.uniform(-1, 1))
+                conf_obs_at = observed_at
                 conf_pub_at = conf_obs_at + timedelta(seconds=self.rng.uniform(0.5, 2.5))
                 conf_rec_at = conf_pub_at + timedelta(seconds=self.rng.uniform(0.2, 1.5))
 
                 conflict_obs = ObservationRecord(
-                    report_id=f"rep_conf_{uuid.uuid4().hex[:8]}",
+                    report_id="rep_conf_"+stable,
                     scenario_id=ref.scenario_id,
                     zone_id=ref.zone_id,
                     source_id=alt_source,

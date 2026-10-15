@@ -11,6 +11,7 @@ from crowd_reliability.models.schema import (
     TreeOutputRecord, ForecastRecord, ReferenceStateRecord
 )
 from crowd_reliability.models.manifest import PipelineManifest, ModelNotReadyError, assess_readiness
+from crowd_reliability.contracts import select_reports, utc
 from crowd_reliability.ml.tree_bank import DecisionTreeBank, TREE_CHANNELS
 from crowd_reliability.ml.graph import SpatialGraphBuilder
 from crowd_reliability.ml.spatial import SpatialEncoder, SpatialOutput, stack_zone_features, write_spatial_artifact
@@ -119,6 +120,7 @@ class ArchitecturePipeline:
 
         # Rolling history buffer per scenario: {zone_id: list of U vectors}
         self.history_buffer: Dict[str, Dict[str, List[np.ndarray]]] = {}
+        self._step_cache = {}
 
     def extract_zone_features_detailed(
         self,
@@ -140,11 +142,11 @@ class ArchitecturePipeline:
         present = np.zeros(6, dtype=np.float32)
         fresh = np.zeros(6, dtype=np.float32)
 
-        for obs in recent_observations:
-            if obs.zone_id != zone_id or obs.received_at > as_of_time or obs.variable not in var_indices:
+        for obs in select_reports(recent_observations, as_of_time, zone_id=zone_id):
+            if obs.zone_id != zone_id or utc(obs.received_at) > utc(as_of_time) or obs.variable not in var_indices:
                 continue
             idx = var_indices[obs.variable]
-            age = max(0.0, (as_of_time - obs.observed_at).total_seconds())
+            age = max(0.0, (utc(as_of_time) - utc(obs.observed_at)).total_seconds())
             if age < ages_sec[idx]:
                 ages_sec[idx] = age
                 values[idx] = obs.value
@@ -198,17 +200,14 @@ class ArchitecturePipeline:
         u_features: List[np.ndarray] = []
         detailed_list: List[Dict[str, np.ndarray]] = []
 
+        base=[]
         for z_data in self.venue.zones:
-            detailed = self.extract_zone_features_detailed(z_data["zone_id"], as_of_time, recent_observations)
+            detailed=self.extract_zone_features_detailed(z_data["zone_id"],as_of_time,recent_observations)
             detailed_list.append(detailed)
-            raw_vals, norm_ages, obs_masks = self._legacy_zone_features(detailed)
-
-            dt_feat = np.concatenate([raw_vals, norm_ages, obs_masks])
-            d_vals, d_masks = self.tree_bank.predict_zone(dt_feat, has_exit=z_data.get("has_exit", False))
-            tree_values.append(d_vals)
-            tree_masks.append(d_masks)
-            u_features.append(np.concatenate([raw_vals, norm_ages, obs_masks, np.array(d_vals, dtype=np.float32)]))
-
+            raw,ages,mask=self._legacy_zone_features(detailed)
+            base.append(np.concatenate([raw,ages,mask]))
+        tree_values,tree_masks=self.tree_bank.predict_context(np.array(base),self.graph_builder)
+        u_features=[np.concatenate([row,np.asarray(d,dtype=np.float32)]) for row,d in zip(base,tree_values)]
         return {"detailed": detailed_list, "tree_values": tree_values, "tree_masks": tree_masks, "u_features": u_features}
 
     def _encode_zone_inputs(self, zone_inputs: Dict[str, Any]) -> SpatialOutput:
@@ -246,6 +245,13 @@ class ArchitecturePipeline:
         3. Assembles U[z,t] and appends to rolling history.
         4. Runs MultivariateTemporalForecaster -> multi-horizon forecasts.
         """
+        recent_observations = [o for o in recent_observations if getattr(o,'scenario_id',scenario_id) == scenario_id]
+        as_of_time = utc(as_of_time)
+        # Normalize ORM-loaded naive and UTC-aware report times at the boundary.
+        select_reports(recent_observations, as_of_time, scenario_id=scenario_id)
+        prior = self._step_cache.get(scenario_id) if scenario_id in self.history_buffer else None
+        if prior and as_of_time < prior[0]:raise ValueError('Replay clock cannot move backwards.')
+        if prior and as_of_time == prior[0]:return prior[1]
         forecast_records: List[ForecastRecord] = []
 
         # 1. Decision-tree vector D[z,t] per zone, then 2. hypernetwork + GNN -> H[z,t]
@@ -351,6 +357,7 @@ class ArchitecturePipeline:
                     )
                     forecast_records.append(f_rec)
 
+        self._step_cache[scenario_id] = (as_of_time, (tree_records, forecast_records))
         return tree_records, forecast_records
 
     def readiness(self) -> Dict[str, Any]:
@@ -412,6 +419,7 @@ class ArchitecturePipeline:
                 rel = f"{self.manifest.spatial_artifact_dir}/{filename}"
                 _verify_recorded_hash(self.manifest, rel, os.path.join(spatial_dir, filename))
             self.spatial.load(spatial_dir)
+            self.hypernet=self.spatial.hypernet;self.gnn=self.spatial.gnn
         elif any(os.path.exists(os.path.join(model_dir, f)) for f in ("hypernet.pt", "gnn.pt")):
             raise ValueError(
                 "Legacy spatial checkpoint (hypernet.pt/gnn.pt at the model root, no spatial_artifact_dir) "

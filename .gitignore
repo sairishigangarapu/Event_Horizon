@@ -36,3 +36,14 @@ data/app.db
 
 # Streamlit
 .streamlit/
+
+# Integrated Studio static assets are source files.
+!studio/dist/
+!studio/dist/**
+
+# Local runs and generated retrospective reports.
+studio/outputs/
+studio/analysis/
+data/*.db
+data/*.db-shm
+data/*.db-wal

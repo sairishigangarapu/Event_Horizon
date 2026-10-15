@@ -85,7 +85,7 @@ def _original_extract_zone_features(zone_id, as_of_time, recent_observations):
     ages_sec = np.full(6, 999.0, dtype=np.float32)
     obs_masks = np.zeros(6, dtype=np.float32)
     zone_obs = [o for o in recent_observations if o.zone_id == zone_id and o.received_at <= as_of_time]
-    for obs in zone_obs:
+    for obs in sorted(zone_obs,key=lambda o:(o.observed_at,o.received_at,o.report_id),reverse=True):
         if obs.variable in var_indices:
             idx = var_indices[obs.variable]
             age = max(0.0, (as_of_time - obs.observed_at).total_seconds())

@@ -3,6 +3,7 @@ import os
 import pandas as pd
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional, Tuple
+from crowd_reliability.contracts import utc, select_reports
 from crowd_reliability.models.schema import ForecastRecord, ObservationRecord
 from crowd_reliability.simulation.scenarios import VenueLayout, get_default_venue
 from crowd_reliability.ml.temporal import TARGET_VAR_NAMES
@@ -109,6 +110,7 @@ class CentralSourceAdapter:
         forecasts: List[ForecastRecord] = []
         lookback = timedelta(seconds=CENTRAL_LOOKBACK_SECONDS)
         for t_issue in sorted(issue_times):
+            select_reports(observations,t_issue,scenario_id=scenario_id)
             for z_data in venue.zones:
                 z_id = z_data["zone_id"]
                 has_exit = z_data.get("has_exit", False)
@@ -117,7 +119,7 @@ class CentralSourceAdapter:
                         continue
                     candidates = sorted(
                         (o for o in by_key.get((z_id, var_name), [])
-                         if o.received_at <= t_issue and o.observed_at >= t_issue - lookback),
+                         if utc(o.received_at) <= utc(t_issue) and utc(t_issue - lookback) <= utc(o.observed_at) <= utc(t_issue)),
                         key=lambda o: (o.observed_at, o.received_at, o.report_id),
                     )
                     if not candidates:

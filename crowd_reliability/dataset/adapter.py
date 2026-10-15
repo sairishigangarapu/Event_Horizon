@@ -9,8 +9,7 @@ Mapping:
     queue_length/exit_open from ground_truth, sampled on the 5s grid.
   - Person-1 observations: per-zone density (track count / area) and speed
     (mean track speed) from profile_A and profile_B trackers, projected to
-    world zones via an affine fit on links.csv (which pairs observed tracks
-    with known ground-truth coordinates). Two profiles => two independent
+    world zones using frozen, independently measured observation_calibration.json. Two profiles => two independent
     observation sources (useful for conflict/freshness testing).
 
 Observations and labels never include forecasts. Scenario ids are the dataset
@@ -59,24 +58,6 @@ def _m_per_px(dataset_dir: str, profile: str, width_m: float) -> float:
     return width_m / prof["image_width_px"]
 
 
-def _calibrate_x(run_gt: pd.DataFrame, run_links: pd.DataFrame):
-    """
-    Fit a 1-D affine x_m = slope * gt_ref_x_px + intercept from links rows.
-
-    Only the longitudinal axis (x) is recoverable: the perspective projection
-    makes gt_ref_y_px uncorrelated with lateral y_m, so a full 2-D affine is
-    degenerate. With rows=1 zoning (full cross-section), lateral position is
-    irrelevant — x alone assigns each track to its longitudinal zone.
-    """
-    gt = run_gt[run_gt["in_scene"]]
-    merged = run_links.merge(gt, left_on=["frame", "gt_agent_id"], right_on=["step", "agent_id"])
-    if len(merged) < 3 or merged["gt_ref_x_px"].std(ddof=0) == 0:
-        return None
-    slope, intercept = np.polyfit(merged["gt_ref_x_px"], merged["x_m"], 1)
-    if not (np.isfinite(slope) and np.isfinite(intercept)):
-        return None
-    return float(slope), float(intercept)
-
 
 def _project_x(profile_df: pd.DataFrame, affine_x, x_col: str) -> np.ndarray:
     if affine_x is None or len(profile_df) == 0:
@@ -107,6 +88,10 @@ def ingest_dataset(
     dataset's perspective projection recovers world x (flow direction) reliably but
     not lateral y. The downstream (last) cell is the exit zone.
     """
+    calibration_path=os.path.join(dataset_dir,"observation_calibration.json")
+    if not os.path.isfile(calibration_path):
+        raise ValueError("Provide independently measured observation_calibration.json; hidden-truth calibration is forbidden.")
+    with open(calibration_path,encoding="utf-8") as f:calibration=json.load(f)
     zones = build_grid_zones(32.0, 18.0, grid_cols, grid_rows, exit_boundary=exit_boundary)
     exit_flags = zone_exit_flags(zones)
     areas = _zone_area(zones)
@@ -142,13 +127,12 @@ def ingest_dataset(
             zone_type=z["zone_type"], capacity_definition=z["capacity_definition"],
             map_version="grid_v1",
         ))
-    for z in zones:
-        eid = f"grid_{z['zone_id']}"
-        if db_session.get(ConnectionRecord, eid) is None:
-            db_session.add(ConnectionRecord(
-                edge_id=eid, from_zone=z["zone_id"], to_zone=z["zone_id"],
-                width_m=1.0, direction="bidirectional", map_version="grid_v1",
-            ))
+    for i,z in enumerate(zones):
+        for other in zones[i+1:]:
+            dx=abs(z['x0']-other['x0']);dy=abs(z['y0']-other['y0'])
+            if (abs(dx-32/grid_cols)<1e-6 and dy<1e-6) or (abs(dy-18/grid_rows)<1e-6 and dx<1e-6):
+                eid=f"grid_{z['zone_id']}_{other['zone_id']}"
+                db_session.merge(ConnectionRecord(edge_id=eid,from_zone=z['zone_id'],to_zone=other['zone_id'],width_m=min(32/grid_cols,18/grid_rows),direction="bidirectional",map_version="grid_v2"))
     db_session.commit()
 
     for run in manifest:
@@ -232,10 +216,10 @@ def ingest_dataset(
                     state_at=t_dt, label_available_at=t_dt,
                 ))
                 # exit_open: applicable only in exit zones, label 1.0 (open)
-                if exit_flags[zid]:
+                if exit_flags[zid] and "exit_open" in snap.columns:
                     ref_records.append(ReferenceStateRecord(
                         scenario_id=run_id, zone_id=zid, variable="exit_open",
-                        value=1.0, unit="binary", state_at=t_dt, label_available_at=t_dt,
+                        value=float(snap["exit_open"].iloc[0]), unit="binary", state_at=t_dt, label_available_at=t_dt,
                     ))
                 else:
                     ref_records.append(ReferenceStateRecord(
@@ -250,11 +234,14 @@ def ingest_dataset(
         for profile in ("A", "B"):
             prof_path = os.path.join(dataset_dir, f"profile_{profile}", split, f"{run_id}.csv")
             links_path = os.path.join(dataset_dir, "links", f"profile_{profile}", split, f"{run_id}_links.csv")
-            if not (os.path.exists(prof_path) and os.path.exists(links_path)):
+            if not os.path.exists(prof_path):
                 continue
             prof_df = pd.read_csv(prof_path)
-            links_df = pd.read_csv(links_path)
-            affine_x = _calibrate_x(gt, links_df)
+
+            params=calibration.get(profile)
+            if not params or not params.get("provenance"):raise ValueError("Calibration requires provenance for profile "+profile)
+            affine_x=(float(params["slope_m_per_px"]),float(params["intercept_m"]))
+            if not np.isfinite(affine_x).all() or affine_x[0]==0:raise ValueError("Calibration must be finite with nonzero scale.")
             if affine_x is None or len(prof_df) == 0:
                 continue
 
@@ -275,17 +262,17 @@ def ingest_dataset(
                                         np.full(len(prof_df), 9.0)])
             prof_df["zone_id"] = assign_zone_ids(world_xy, zones, width_m, 18.0, grid_cols, grid_rows)
 
-            # Observed speed: profile B carries speed_px_s directly; profile A uses
-            # the linked ground-truth speed (px/s -> m/s) when available.
-            links_speed_lookup = {}
-            if profile == "A" and len(links_df) and "gt_speed_px_s" in links_df.columns:
-                pairs = links_df[["frame", "track_id", "gt_speed_px_s"]].copy()
-                pairs["frame"] = pairs["frame"].astype(int)
-                pairs["track_id"] = pairs["track_id"].astype(int)
-                links_speed_lookup = dict(zip(
-                    map(tuple, pairs[["frame", "track_id"]].values),
-                    pairs["gt_speed_px_s"].values,
-                ))
+            # Observed speed: profile B carries speed_px_s; profile A uses track differences.
+            # Camera speed comes only from successive observable track positions.
+            observed_speed={}
+            for track, group in prof_df.groupby("track_id"):
+                group=group.sort_values("frame")
+                previous=None
+                for _,row in group.iterrows():
+                    if previous is not None:
+                        seconds=(int(row["frame"])-previous[0])*sim_dt_s
+                        if seconds>0:observed_speed[(int(row["frame"]),int(track))]=abs(float(row[x_col])-previous[1])/seconds
+                    previous=(int(row["frame"]),float(row[x_col]))
 
             # Sample observations on the 5s grid frames.
             for t in eval_times:
@@ -297,8 +284,8 @@ def ingest_dataset(
                 for z in zones:
                     zid = z["zone_id"]
                     tracks = slice_df[(slice_df["zone_id"] == zid) & (slice_df["zone_id"] != "")]
-                    if tracks.empty:
-                        continue
+                    # Empty covered frames are explicit zero-density observations.
+                    # Source outages must be marked in source coverage metadata.
                     # density observation = track count / area (noisy: missing/occluded tracks)
                     obs_records.append(ObservationRecord(
                         report_id=f"o_{profile}_{run_id}_{zid}_{int(t)}",
@@ -313,9 +300,9 @@ def ingest_dataset(
                         if profile == "B" and pd.notna(row.get("speed_px_s")):
                             sp = float(row["speed_px_s"])
                         else:
-                            sp = links_speed_lookup.get((int(row["frame"]), int(row["track_id"])))
+                            sp = observed_speed.get((int(row["frame"]), int(row["track_id"])))
                         if sp is not None and np.isfinite(sp):
-                            speed_vals.append(sp * m_per_px[profile])
+                            speed_vals.append(sp * abs(affine_x[0]))
                     if speed_vals:
                         obs_records.append(ObservationRecord(
                             report_id=f"o_{profile}_{run_id}_{zid}_{int(t)}_spd",
@@ -329,12 +316,12 @@ def ingest_dataset(
         db_session.commit()
 
     zones_json = os.path.join(dataset_dir, "grid_zones.json")
-    with open(zones_json, "w") as f:
+    with open(zones_json, "w", encoding="utf-8") as f:
         json.dump({"zones": zones, "zone_exit_flags": exit_flags,
                    "grid": {"cols": grid_cols, "rows": grid_rows}}, f, indent=2)
 
     split_manifest = os.path.join(dataset_dir, "splits.json")
-    with open(split_manifest, "w") as f:
+    with open(split_manifest, "w", encoding="utf-8") as f:
         json.dump({"train": train_scenarios, "val": val_scenarios, "test": test_scenarios}, f, indent=2)
 
     return {

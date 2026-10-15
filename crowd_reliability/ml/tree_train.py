@@ -130,7 +130,7 @@ def build_training_set(
                 # Missing reference for a variable falls back to the observed
                 # feature value for that variable (keeps sample aligned).
                 feat_idx = TARGET_VAR_NAMES.index(var)
-                Y[channel].append(ref_val if ref_val is not None else float(X_rows[-1][feat_idx]))
+                Y[channel].append(ref_val if ref_val is not None else float("nan"))
 
     meta = {
         "n_samples": len(X_rows),
@@ -194,7 +194,7 @@ def save_training_artifacts(
 
     bank.save(bank_path)
     scaler.save(scaler_path)
-    with open(meta_path, "w") as f:
+    with open(meta_path, "w", encoding="utf-8") as f:
         json.dump(meta, f, indent=2)
     return {"tree_bank": bank_path, "scaler": scaler_path, "metadata": meta_path}
 
@@ -346,7 +346,7 @@ def monte_carlo_refit(
     refs_path = os.path.join(out_dir, "mc_references.jsonl")
 
     run_summaries: List[Dict[str, Any]] = []
-    with open(oos_path, "w") as oos_file, open(refs_path, "w") as refs_file:
+    with open(oos_path, "w", encoding="utf-8") as oos_file, open(refs_path, "w", encoding="utf-8") as refs_file:
         for run in range(n_runs):
             run_seed = seed + run
             sim = CrowdSimulator(venue=venue, seed=run_seed)
@@ -394,7 +394,7 @@ def monte_carlo_refit(
                 "created_at": datetime.now(timezone.utc).isoformat(),
                 "artifacts": paths,
             }
-            with open(os.path.join(run_dir, "mc_metadata.json"), "w") as f:
+            with open(os.path.join(run_dir, "mc_metadata.json"), "w", encoding="utf-8") as f:
                 json.dump(mc_meta, f, indent=2)
 
             # Chronological OOS predictions on the held-out scenario.
@@ -436,6 +436,6 @@ def monte_carlo_refit(
         "mc_references": refs_path,
         "runs": run_summaries,
     }
-    with open(os.path.join(out_dir, "mc_summary.json"), "w") as f:
+    with open(os.path.join(out_dir, "mc_summary.json"), "w", encoding="utf-8") as f:
         json.dump(summary, f, indent=2)
     return summary

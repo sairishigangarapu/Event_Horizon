@@ -351,6 +351,12 @@ class SpatialEncoder:
         self.gnn.save(os.path.join(directory, GNN_FILE))
 
     def load(self, directory: str):
+        checkpoint=torch.load(os.path.join(directory,HYPERNET_FILE),map_location='cpu',weights_only=True)
+        cfg=checkpoint['config']
+        gcfg=torch.load(os.path.join(directory,GNN_FILE),map_location='cpu',weights_only=True)['config']
+        if cfg != self.hypernet.config or gcfg != self.gnn.config:
+            self.hypernet=GraphHyperNetwork(**cfg,seed=0)
+            self.gnn=SpatialGNN(**gcfg,seed=1)
         self.hypernet.load(os.path.join(directory, HYPERNET_FILE))
         self.gnn.load(os.path.join(directory, GNN_FILE))
         graph_meta = self.graph.metadata()
@@ -387,7 +393,7 @@ def write_spatial_artifact(encoder: SpatialEncoder, model_dir: str) -> Tuple[str
             "metadata": encoder.hypernet.metadata,
             "hashes": {name: file_sha256(os.path.join(staging, name)) for name in (HYPERNET_FILE, GNN_FILE)},
         }
-        with open(os.path.join(staging, SPATIAL_MANIFEST_FILE), "w") as f:
+        with open(os.path.join(staging, SPATIAL_MANIFEST_FILE), "w", encoding="utf-8") as f:
             json.dump(manifest, f, indent=2)
 
         # Validate the staged pair before it can be referenced

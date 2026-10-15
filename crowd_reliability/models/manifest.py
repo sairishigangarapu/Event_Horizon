@@ -29,13 +29,13 @@ class PipelineManifest(BaseModel):
         if dirname:
             os.makedirs(dirname, exist_ok=True)
         tmp_path = f"{filepath}.tmp"
-        with open(tmp_path, "w") as f:
+        with open(tmp_path, "w", encoding="utf-8") as f:
             f.write(self.model_dump_json(indent=2))
         os.replace(tmp_path, filepath)
 
     @classmethod
     def load(cls, filepath: str) -> "PipelineManifest":
-        with open(filepath, "r") as f:
+        with open(filepath, "r", encoding="utf-8") as f:
             data = json.load(f)
         return cls(**data)
 
@@ -66,13 +66,15 @@ def assess_readiness(manifest: "PipelineManifest") -> Dict[str, Any]:
     unvalidated = [s for s, status in stages.items() if status != VALIDATED_STATUS]
     has_metrics = manifest.metrics_summary is not None
     ready = not unvalidated and has_metrics
+    synthetic = all(status == "synthetic_validated" for status in stages.values())
     return {
+        "synthetic_only": synthetic,
         "production_ready": ready,
         "serving_mode": "validated" if ready else "experimental",
         "pipeline_version": manifest.pipeline_version,
         "neural_stage_status": stages,
         "unvalidated_stages": unvalidated,
         "metrics_summary_present": has_metrics,
-        "notice": None if ready else EXPERIMENTAL_NOTICE.format(
+        "notice": None if ready else "Trained and evaluated on held-out synthetic scenarios only; real-world safety and venue transfer are unvalidated." if synthetic else EXPERIMENTAL_NOTICE.format(
             stages=", ".join(f"{s}: {stages[s]}" for s in unvalidated) or "no validation metrics recorded"),
     }

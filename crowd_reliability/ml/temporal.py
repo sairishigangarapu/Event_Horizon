@@ -96,6 +96,7 @@ class MultivariateTemporalForecaster(nn.Module):
             "num_layers": self.num_layers,
             "num_horizons": self.num_horizons,
             "horizons_sec": self.horizons_sec,
+            "numeric_activation": getattr(self,"numeric_activation","relu"),
             "version": self.version
         }, filepath)
 
@@ -109,6 +110,9 @@ class MultivariateTemporalForecaster(nn.Module):
             num_horizons=checkpoint["num_horizons"],
             horizons_sec=checkpoint["horizons_sec"]
         )
+        if checkpoint.get("numeric_activation")=="softplus":
+            for head in model.numeric_heads:head[-1]=nn.Softplus()
+            model.numeric_activation="softplus"
         model.load_state_dict(checkpoint["state_dict"])
         model.version = checkpoint.get("version", model.version)
         # A loaded checkpoint is for inference: disable the inter-layer GRU dropout,

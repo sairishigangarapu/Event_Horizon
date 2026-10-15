@@ -25,6 +25,7 @@ from crowd_reliability.ml.pipeline import (
 from crowd_reliability.models.manifest import assess_readiness
 from crowd_reliability.ml.tree_bank import DecisionTreeBank
 from crowd_reliability.ml.trees import TreeSnapshot, infer_tree_vector
+from crowd_reliability.ml.graph import SpatialGraphBuilder
 from crowd_reliability.ml.features import FEATURE_SCHEMA_VERSION
 from crowd_reliability.services.central_source import CentralSourceAdapter
 from crowd_reliability.services.comparator import ForecastComparator
@@ -143,6 +144,7 @@ def get_forecasts(
     variable: Optional[str] = None,
     limit: int = Query(default=500, ge=1, le=5000),
     offset: int = Query(default=0, ge=0),
+    as_of: Optional[str] = None,
     db: Session = Depends(get_db)
 ):
     stream_b_status = _stream_b_status()
@@ -156,7 +158,9 @@ def get_forecasts(
     arch_recs = [r for r in records if r.stream_id == "stream_b_architecture"]
     cent_recs = [r for r in records if r.stream_id == "stream_a_central"]
 
-    diffs = comparator.align_and_compare(arch_recs, cent_recs)
+    try:cutoff=datetime.fromisoformat(as_of) if as_of else datetime.now(timezone.utc)
+    except ValueError:raise HTTPException(422,'Invalid as_of timestamp.')
+    diffs = comparator.align_and_compare(arch_recs, cent_recs,as_of_time=cutoff)
     total_comparisons = len(diffs)
     paginated_diffs = diffs[offset : offset + limit]
 
@@ -237,6 +241,7 @@ def get_assessments(
 @app.get("/api/metrics")
 def get_metrics(
     scenario_id: str = "crowd_surge",
+    evaluated_at: Optional[str] = None,
     db: Session = Depends(get_db)
 ):
     forecasts = db.query(ForecastRecord).filter(ForecastRecord.scenario_id == scenario_id).all()
@@ -245,7 +250,9 @@ def get_metrics(
     if not forecasts or not reference_states:
         return {"scenario_id": scenario_id, "metrics": {}}
 
-    res = evaluator.score_predictions(forecasts, reference_states)
+    try:cutoff=datetime.fromisoformat(evaluated_at) if evaluated_at else datetime.now(timezone.utc)
+    except ValueError:raise HTTPException(422,'Invalid evaluated_at timestamp.')
+    res = evaluator.score_predictions(forecasts, reference_states,evaluation_time=cutoff)
     return {"scenario_id": scenario_id, "metrics": res}
 
 # --- Shared interface freeze (PDF Section G) additions -----------------------
@@ -356,6 +363,11 @@ def get_tree_outputs(
     else:
         zone_exit_flags = {z["zone_id"]: bool(z.get("has_exit", False)) for z in get_default_venue().zones}
     zone_ids = sorted(zone_exit_flags.keys())
+    if zones:
+        descriptors=[dict(zone_id=z.zone_id,zone_type=z.zone_type,has_exit=z.zone_type=='exit',capacity_definition=z.capacity_definition,area_m2=(z.geometry or {}).get('area_m2',50.)) for z in zones]
+        edges=[dict(edge_id=e.edge_id,from_zone=e.from_zone,to_zone=e.to_zone,width_m=e.width_m,direction=e.direction) for e in db.query(ConnectionRecord).all() if e.from_zone in zone_exit_flags and e.to_zone in zone_exit_flags]
+        snapshot_graph=SpatialGraphBuilder(descriptors,edges)
+    else:snapshot_graph=SpatialGraphBuilder(get_default_venue().zones,get_default_venue().connections)
 
     snapshot = TreeSnapshot(
         scenario_id=scenario_id,
@@ -363,6 +375,7 @@ def get_tree_outputs(
         observations=observations,
         zone_ids=zone_ids,
         zone_exit_flags=zone_exit_flags,
+        graph=snapshot_graph,
     )
     result = infer_tree_vector(snapshot, bank)
     return {

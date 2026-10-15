@@ -407,7 +407,7 @@ def run(args) -> str:
         "summary": summary,
         "runtime_s": round(time.time() - started, 1),
     }
-    with open(os.path.join(run_dir, "run_manifest.json"), "w") as f:
+    with open(os.path.join(run_dir, "run_manifest.json"), "w", encoding="utf-8") as f:
         json.dump(run_manifest, f, indent=2, default=str)
 
     print_report(metric_rows, summary)

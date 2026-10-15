@@ -41,7 +41,7 @@ def test_reports_received_after_issue_time_are_never_used(surge):
     tampered = copy.deepcopy(obs)
     for o in tampered:
         if o.received_at > cut:
-            o.value = o.value * 10 + 100
+            o.value = 1-o.value if o.variable == "exit_open" else o.value * 10 + 100
     changed = adapter.generate_simulated_forecasts(sc.scenario_id, tampered, venue, issue_times=grid)
 
     early = lambda fs: sorted(_key(f) for f in fs if f.issued_at <= cut)

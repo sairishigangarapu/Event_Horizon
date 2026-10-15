@@ -8,6 +8,7 @@ import numpy as np
 from sklearn.preprocessing import StandardScaler
 
 from crowd_reliability.ml.temporal import TARGET_VAR_NAMES
+from crowd_reliability.contracts import select_reports
 
 FEATURE_SCHEMA_VERSION = "obs_only_v1"
 
@@ -67,7 +68,7 @@ def build_feature_row(
     ages_sec = np.full(6, MISSING_AGE_SENTINEL, dtype=np.float32)
     obs_masks = np.zeros(6, dtype=np.float32)
 
-    for obs in observations:
+    for obs in select_reports(observations, as_of, scenario_id=scenario_id, zone_id=zone_id):
         if _field(obs, "zone_id") != zone_id:
             continue
         if scenario_id is not None and _field(obs, "scenario_id") not in (None, scenario_id):
@@ -144,7 +145,7 @@ class FeatureScaler:
         os.makedirs(os.path.dirname(filepath) or ".", exist_ok=True)
         joblib.dump({"scaler": self.scaler, "metadata": self.metadata()}, filepath)
         meta_path = os.path.splitext(filepath)[0] + ".meta.json"
-        with open(meta_path, "w") as f:
+        with open(meta_path, "w", encoding="utf-8") as f:
             json.dump(self.metadata(), f, indent=2)
 
     @classmethod

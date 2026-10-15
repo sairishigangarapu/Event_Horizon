@@ -1,0 +1,22 @@
+{
+  "main_backend": "147 passed (Streamlit legacy dashboard test excluded: dependency unavailable)",
+  "person4": "47 passed",
+  "studio_python": "18 passed",
+  "javascript": "40 checks passed",
+  "dataset_after_calibration_cleanup": "passed",
+  "http_roundtrip": {
+    "result": "PASS",
+    "clock_s": 35,
+    "received_measurements": 106,
+    "comparisons": 144,
+    "matured_metric_groups": 10,
+    "utf8_report": "PASS",
+    "future_actuals_hidden": "PASS",
+    "cluster_assignments": [
+      -1
+    ]
+  },
+  "windows_encoding_regression": "cp1252 default emulated; UTF-8 master report passed",
+  "browser_visual_verification": "not performed",
+  "training_scope": "synthetic_only"
+}

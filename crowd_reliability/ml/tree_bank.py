@@ -60,6 +60,7 @@ class DecisionTreeBank:
         If a fitted FeatureScaler is provided, features are transformed with it and the
         scaler is stored so predict_zone applies the identical transform at inference.
         """
+        self.exit_unavailable = False
         self.scaler = scaler
         if self.scaler is not None:
             features = self.scaler.transform(features)
@@ -68,13 +69,16 @@ class DecisionTreeBank:
             if channel == "probability_exit_open":
                 # Only train on valid exit samples (not masked out with -1)
                 valid_mask = (y >= 0)
-                if np.sum(valid_mask) > 10 and len(np.unique(y[valid_mask])) > 1:
+                if np.sum(valid_mask) > 0:
                     self.trees[channel].fit(features[valid_mask], y[valid_mask].astype(int))
                 else:
                     # Fallback single class
-                    self.trees[channel].fit(features[:2], np.array([1, 1]))
+                    self.trees[channel].fit(features[:1], np.array([0]))
+                    self.exit_unavailable = True
             else:
-                self.trees[channel].fit(features, y)
+                valid = np.isfinite(y)
+                if not np.any(valid):raise ValueError("No valid reference labels for "+channel)
+                self.trees[channel].fit(features[valid], y[valid])
         self.is_fitted = True
 
     def predict_zone(self, feature_row: np.ndarray, has_exit: bool = False) -> Tuple[List[float], List[int]]:
@@ -109,7 +113,8 @@ class DecisionTreeBank:
                     else:
                         if hasattr(tree, "predict_proba"):
                             proba = tree.predict_proba(x)[0]
-                            val = float(proba[1]) if len(proba) > 1 else float(proba[0])
+                            classes = list(tree.classes_)
+                            val = float(proba[classes.index(1)]) if 1 in classes else 0.0
                         else:
                             val = float(tree.predict(x)[0])
                 else:
@@ -117,23 +122,38 @@ class DecisionTreeBank:
 
             mask = 1 if (channel != "probability_exit_open" or has_exit) else 0
             values.append(round(val, 4))
+            if channel == "probability_exit_open" and getattr(self,"exit_unavailable",False):mask=0
             masks.append(mask)
 
         return values, masks
+
+    def predict_context(self, features, graph):
+        model=getattr(self,'context_model',None)
+        if model is not None:
+            from crowd_reliability.ml.context import context_matrix
+            values,masks,clusters=model.predict(context_matrix(features,graph),[z.get('has_exit',False) for z in graph.zones])
+            self.last_cluster_ids=clusters
+            return values.tolist(),masks.tolist()
+        predictions=[self.predict_zone(x,z.get('has_exit',False)) for x,z in zip(features,graph.zones)]
+        return [p[0] for p in predictions],[p[1] for p in predictions]
 
     def save(self, filepath: str):
         os.makedirs(os.path.dirname(filepath) or ".", exist_ok=True)
         joblib.dump({
             "trees": self.trees,
+            "context_model": getattr(self,"context_model",None),
             "is_fitted": self.is_fitted,
             "version": self.version,
             "scaler": self.scaler,
+            "exit_unavailable": getattr(self,"exit_unavailable",False),
             "max_depth": self.max_depth,
             "random_state": self.random_state,
         }, filepath)
 
     def load(self, filepath: str):
         data = joblib.load(filepath)
+        self.context_model = data.get("context_model")
+        self.exit_unavailable = data.get("exit_unavailable",False)
         self.trees = data["trees"]
         self.is_fitted = data["is_fitted"]
         self.version = data.get("version", self.version)

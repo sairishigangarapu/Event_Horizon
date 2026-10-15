@@ -23,6 +23,8 @@ GRID_COLS, GRID_ROWS = 8, 1
 def _write_synthetic_dataset(dst: str):
     os.makedirs(dst, exist_ok=True)
     world_w, world_h = 32.0, 18.0
+    with open(os.path.join(dst,"observation_calibration.json"),"w") as f:
+        json.dump({p:{"slope_m_per_px":2.,"intercept_m":0.,"provenance":"independent fixture landmarks"} for p in ("A","B")},f)
     # config: image widths drive px->m scaling
     with open(os.path.join(dst, "config_used.json"), "w") as f:
         json.dump({"version": "1.0.0", "world": {"width_m": world_w, "height_m": world_h},
@@ -127,7 +129,7 @@ def test_dataset_ingest_produces_zones_obs_refs(tmp_path):
 
     # exit_open only labelled for exit zones
     exit_open_zones = {r.zone_id for r in refs if r.variable == "exit_open" and r.value >= 0}
-    assert exit_open_zones == {"g_7_0"}
+    assert exit_open_zones == set()  # No observed gate status in this fixture.
 
 
 def test_dataset_projection_assigns_agents_to_correct_zones(tmp_path):

@@ -298,7 +298,7 @@ def train(
 
     # Save manifest JSON
     manifest_path = output_path.replace(".pt", "_manifest.json")
-    with open(manifest_path, "w") as f:
+    with open(manifest_path, "w", encoding="utf-8") as f:
         json.dump(manifest, f, indent=2)
 
     print(f"[train] Done. Checkpoint: {output_path}")

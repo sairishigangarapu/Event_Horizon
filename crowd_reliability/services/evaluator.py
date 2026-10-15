@@ -15,22 +15,26 @@ class EvaluationService:
         self,
         forecasts: List[ForecastRecord],
         reference_states: List[ReferenceStateRecord],
-        horizons_sec: List[int] = None
+        horizons_sec: List[int] = None,
+        evaluation_time: Optional[datetime] = None
     ) -> Dict[str, Any]:
         if horizons_sec is None:
             horizons_sec = [30, 60, 120]
+
+        from crowd_reliability.contracts import utc
+        cutoff = utc(evaluation_time or datetime.now(timezone.utc))
 
         def normalize_ts(dt: datetime) -> int:
             if dt.tzinfo is not None:
                 dt = dt.astimezone(timezone.utc).replace(tzinfo=None)
             epoch = datetime(2026, 1, 1)
             # Round to nearest 5-second step
-            return int(round((dt - epoch).total_seconds() / 5.0) * 5)
+            return (dt - epoch).total_seconds()
 
         # Map reference states by (zone_id, variable, normalized_time_sec)
         ref_map: Dict[Tuple[str, str, int], float] = {
-            (r.zone_id, r.variable, normalize_ts(r.state_at)): r.value
-            for r in reference_states
+            (r.scenario_id, r.zone_id, r.variable, r.unit, normalize_ts(r.state_at)): r.value
+            for r in reference_states if utc(r.label_available_at) <= cutoff and utc(r.state_at) <= cutoff
         }
 
         # Metrics structure:
@@ -41,15 +45,16 @@ class EvaluationService:
         grouped: Dict[Tuple[str, int, str], List[Tuple[float, float]]] = {}
 
         for f in forecasts:
+            if utc(f.received_at)>cutoff or utc(f.issued_at)>cutoff:continue
             stream = f.stream_id
             lead_sec = int(round((f.target_at - f.issued_at).total_seconds()))
 
             # Match to nearest horizon
             matched_h = min(horizons_sec, key=lambda h: abs(h - lead_sec))
-            if abs(matched_h - lead_sec) > 10:
+            if lead_sec not in horizons_sec:
                 continue
 
-            ref_val = ref_map.get((f.zone_id, f.variable, normalize_ts(f.target_at)))
+            ref_val = ref_map.get((f.scenario_id, f.zone_id, f.variable, f.unit, normalize_ts(f.target_at)))
             if ref_val is None:
                 continue
 

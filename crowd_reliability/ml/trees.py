@@ -33,6 +33,7 @@ class TreeSnapshot:
     observations: List[Any]
     zone_ids: List[str]
     zone_exit_flags: Dict[str, bool] = field(default_factory=dict)
+    graph: Any = None
 
 
 @dataclass
@@ -122,6 +123,13 @@ def infer_tree_vector(snapshot: TreeSnapshot, bank: DecisionTreeBank) -> TreeVec
         values[i] = d_vals
         masks[i] = d_masks
 
+    if getattr(bank,'context_model',None) is not None:
+        if snapshot.graph is None:raise ValueError('A contextual tree bank requires snapshot.graph.')
+        graph=snapshot.graph
+        base=np.array([build_feature_row(z,snapshot.as_of_time,snapshot.observations,scenario_id=snapshot.scenario_id) for z in graph.zone_ids])
+        context_values,context_masks=bank.predict_context(base,graph)
+        order=[graph.zone_ids.index(z) for z in zone_ids]
+        values=np.array(context_values)[order];masks=np.array(context_masks)[order]
     scaler_version = None
     if bank.scaler is not None:
         scaler_version = getattr(bank.scaler, "version", None)

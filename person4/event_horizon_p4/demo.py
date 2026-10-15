@@ -41,7 +41,7 @@ _WARNING     = (
 
 def _write_json(data: dict, path: str) -> None:
     os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
-    with open(path, "w") as f:
+    with open(path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, default=str)
     print(f"[demo] Written: {path}")
 

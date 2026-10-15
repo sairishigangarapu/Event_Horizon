@@ -314,7 +314,8 @@ def cmd_replay(scenario: str = "crowd_surge", seed: int = 42):
             db.commit()
 
         print(f"[replay] Running inference on {len(obs_records)} observations...")
-        times = sorted(list(set(o.received_at for o in obs_records)))[::3]
+        from crowd_reliability.services.central_source import issue_grid
+        times = issue_grid([o.received_at for o in obs_records], settings.step_seconds)
 
         arch_forecasts = []
         for t in times:
@@ -607,7 +608,7 @@ def cmd_train_trees(train: str = None, test: str = None, seed: int = 42,
         print(f"\n=== Held-out benchmark ({test_ids[0]}) ===")
         _print_channel_metrics(metrics)
         import json
-        with open(os.path.join(out_dir, "holdout_benchmark.json"), "w") as f:
+        with open(os.path.join(out_dir, "holdout_benchmark.json"), "w", encoding="utf-8") as f:
             json.dump(metrics, f, indent=2)
 
 
@@ -652,7 +653,7 @@ def cmd_export_tree_vector(scenario: str = "crowd_surge", as_of: str = None,
     result = infer_tree_vector(snapshot, bank)
 
     os.makedirs(os.path.dirname(out) or ".", exist_ok=True)
-    with open(out, "w") as f:
+    with open(out, "w", encoding="utf-8") as f:
         f.write(result.to_json())
     print(f"[export-tree-vector] Wrote {len(result.zone_ids)} zones x {len(TREE_CHANNELS)} channels to {out}")
 
@@ -675,7 +676,7 @@ def cmd_monte_carlo_refit(runs: int = 5, seed: int = 42,
     print("\n=== Monte Carlo OOS benchmark (held-out scenario) ===")
     _print_channel_metrics(metrics)
     import json
-    with open(os.path.join(out_dir, "mc_benchmarks.json"), "w") as f:
+    with open(os.path.join(out_dir, "mc_benchmarks.json"), "w", encoding="utf-8") as f:
         json.dump(metrics, f, indent=2)
 
 
@@ -757,7 +758,7 @@ def cmd_dataset_train(zones_json: str, split_manifest: str, seed: int = 42,
     metrics = benchmark_channels(rows, test_refs)
     print("\n=== Dataset per-channel benchmark (test scenario: {}) ===".format(test_ids[0]))
     _print_channel_metrics(metrics)
-    with open(os.path.join(out_dir, "dataset_benchmark.json"), "w") as f:
+    with open(os.path.join(out_dir, "dataset_benchmark.json"), "w", encoding="utf-8") as f:
         json.dump(metrics, f, indent=2)
 
     # Export one D[z,t] sample vector (Persons 3 & 4)
@@ -770,7 +771,7 @@ def cmd_dataset_train(zones_json: str, split_manifest: str, seed: int = 42,
             zone_exit_flags=zone_flags,
         ), bank)
         os.makedirs(os.path.dirname(export_sample) or ".", exist_ok=True)
-        with open(export_sample, "w") as f:
+        with open(export_sample, "w", encoding="utf-8") as f:
             f.write(result.to_json())
         print(f"[dataset-train] Export sample D vector -> {export_sample}")
 
