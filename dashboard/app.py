@@ -90,15 +90,26 @@ selected_scenario = st.sidebar.selectbox(
 sc_info = SCENARIO_PRESETS[selected_scenario]
 st.sidebar.info(f"**Description:** {sc_info.description}\n\n**Duration:** {sc_info.duration_seconds}s | **Step:** {sc_info.step_seconds}s")
 
-# Load DB data
+# Model readiness: never present untrained neural forecasts as validated.
+from crowd_reliability.ml.pipeline import ModelArtifactError, load_manifest
+from crowd_reliability.models.manifest import assess_readiness
+try:
+    _readiness = assess_readiness(load_manifest(settings.model_dir))
+    if not _readiness["production_ready"]:
+        st.warning(f"**Experimental Stream B.** {_readiness['notice']}")
+except ModelArtifactError as _exc:
+    st.error(f"Model artifacts unavailable: {_exc}")
+
+# Load DB data (create the tables first so a fresh database shows the seed button, not an error)
+init_db()
 zones, connections, forecasts, reference_states, observations, manifest = load_data(selected_scenario)
 
 if not forecasts or not reference_states:
     st.warning("⚠️ No simulation data found in database. Please seed the demo first.")
     if st.button("🌱 Seed Demo Data Now"):
-        with st.spinner("Seeding demo database, generating scenarios, and training baseline pipeline..."):
-            from crowd_reliability.cli import cmd_seed_demo
-            cmd_seed_demo(seed=42)
+        with st.spinner("Seeding demo database from the committed models (no training)..."):
+            from crowd_reliability.cli import cmd_seed_serving
+            cmd_seed_serving(seed=42)
             st.success("Demo seeded successfully! Please refresh.")
             st.rerun()
     st.stop()
@@ -129,6 +140,7 @@ st.markdown("""
 Assessment of report freshness, sensor conflicts, and dual-stream forecast divergence during simulated crowd emergencies.
 Density, speed, inflow, outflow, queue length and exit availability remain **strictly separate channels**.
 """)
+
 
 # Key Metrics Row
 col1, col2, col3, col4 = st.columns(4)

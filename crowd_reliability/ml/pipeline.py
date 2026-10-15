@@ -10,7 +10,7 @@ from crowd_reliability.models.schema import (
     ZoneRecord, ConnectionRecord, ObservationRecord,
     TreeOutputRecord, ForecastRecord, ReferenceStateRecord
 )
-from crowd_reliability.models.manifest import PipelineManifest
+from crowd_reliability.models.manifest import PipelineManifest, ModelNotReadyError, assess_readiness
 from crowd_reliability.ml.tree_bank import DecisionTreeBank, TREE_CHANNELS
 from crowd_reliability.ml.graph import SpatialGraphBuilder
 from crowd_reliability.ml.spatial import SpatialEncoder, SpatialOutput, stack_zone_features, write_spatial_artifact
@@ -23,6 +23,50 @@ def _calc_sha256(filepath: str) -> str:
         while chunk := f.read(65536):
             h.update(chunk)
     return h.hexdigest()
+
+class ModelArtifactError(ValueError):
+    """A required model artifact is missing, fails its recorded hash, or contradicts the manifest."""
+
+
+def load_manifest(model_dir: str) -> PipelineManifest:
+    path = os.path.join(model_dir, "manifest.json")
+    if not os.path.exists(path):
+        raise ModelArtifactError(f"Missing model artifact: {path}")
+    return PipelineManifest.load(path)
+
+
+def _verify_recorded_hash(manifest: PipelineManifest, rel_name: str, path: str):
+    if not os.path.exists(path):
+        raise ModelArtifactError(f"Missing model artifact: {path}")
+    expected = manifest.model_hashes.get(rel_name)
+    if expected is None:
+        raise ModelArtifactError(f"Model integrity verification failed for {rel_name}: no recorded hash")
+    if _calc_sha256(path) != expected:
+        raise ModelArtifactError(f"Model integrity verification failed for {rel_name}")
+
+
+def load_verified_tree_bank(model_dir: str, manifest: Optional[PipelineManifest] = None) -> DecisionTreeBank:
+    """
+    The single way to load the serving tree bank (used by the pipeline and the API).
+    Requires the file, its recorded hash, a fitted bank, and tree/scaler versions
+    that match the manifest. Never falls back to an unfitted bank.
+    """
+    manifest = manifest or load_manifest(model_dir)
+    path = os.path.join(model_dir, "tree_bank.joblib")
+    _verify_recorded_hash(manifest, "tree_bank.joblib", path)
+    bank = DecisionTreeBank()
+    bank.load(path)
+    if not bank.is_fitted:
+        raise ModelArtifactError(f"Tree bank {path} is not fitted")
+    if bank.version != manifest.tree_version:
+        raise ModelArtifactError(
+            f"Tree bank version {bank.version} does not match manifest tree_version {manifest.tree_version}")
+    scaler_version = getattr(bank.scaler, "version", None) if bank.scaler is not None else None
+    if scaler_version != manifest.scaler_version:
+        raise ModelArtifactError(
+            f"Tree bank scaler {scaler_version} does not match manifest scaler_version {manifest.scaler_version}")
+    return bank
+
 
 class ArchitecturePipeline:
     """
@@ -70,6 +114,8 @@ class ArchitecturePipeline:
             num_horizons=len(self.horizons_sec),
             horizons_sec=self.horizons_sec
         )
+        # Inference pipeline: never run with dropout active (see step()).
+        self.temporal_model.eval()
 
         # Rolling history buffer per scenario: {zone_id: list of U vectors}
         self.history_buffer: Dict[str, Dict[str, List[np.ndarray]]] = {}
@@ -259,6 +305,9 @@ class ArchitecturePipeline:
         # 4. Multivariate Temporal Forecasting
         # Shape: [num_zones, lookback_steps, u_dim]
         u_history_tensor = torch.tensor(np.array(u_current_per_zone), dtype=torch.float32)
+        # Enforce inference mode here as well: the model may have been replaced or switched
+        # to train() by a caller, and GRU dropout would make forecasts nondeterministic.
+        self.temporal_model.eval()
         with torch.no_grad():
             # [num_zones, num_horizons, 6]
             forecasts_tensor = self.temporal_model(u_history_tensor).cpu().numpy()
@@ -304,7 +353,25 @@ class ArchitecturePipeline:
 
         return tree_records, forecast_records
 
+    def readiness(self) -> Dict[str, Any]:
+        """Serving readiness of the loaded pipeline (see models.manifest.assess_readiness)."""
+        report = assess_readiness(self.manifest)
+        report["tree_bank_fitted"] = bool(self.tree_bank.is_fitted)
+        return report
+
+    def require_ready(self, require_validated: bool):
+        """Strict mode: refuse to serve unless every neural stage is trained and validated."""
+        report = self.readiness()
+        if require_validated and not report["production_ready"]:
+            raise ModelNotReadyError(report["notice"])
+        return report
+
     def save_pipeline(self, model_dir: str):
+        if not self.tree_bank.is_fitted:
+            raise ModelArtifactError("Refusing to save a pipeline whose tree bank is not fitted")
+        self.manifest.tree_version = self.tree_bank.version
+        scaler = self.tree_bank.scaler
+        self.manifest.scaler_version = getattr(scaler, "version", None) if scaler is not None else None
         os.makedirs(model_dir, exist_ok=True)
         tb_path = os.path.join(model_dir, "tree_bank.joblib")
         tm_path = os.path.join(model_dir, "temporal_model.pt")
@@ -329,30 +396,21 @@ class ArchitecturePipeline:
         self.manifest.save(os.path.join(model_dir, "manifest.json"))
 
     def load_pipeline(self, model_dir: str):
-        manifest_path = os.path.join(model_dir, "manifest.json")
-        if os.path.exists(manifest_path):
-            self.manifest = PipelineManifest.load(manifest_path)
-
-        def _verify_file(filename: str, filepath: str, required: bool = False):
-            if filename in self.manifest.model_hashes:
-                expected = self.manifest.model_hashes[filename]
-                actual = _calc_sha256(filepath)
-                if expected != actual:
-                    raise ValueError(f"Model integrity verification failed for {filename}")
-            elif required:
-                raise ValueError(f"Model integrity verification failed for {filename}: no recorded hash")
-
-        tb_path = os.path.join(model_dir, "tree_bank.joblib")
-        if os.path.exists(tb_path):
-            _verify_file("tree_bank.joblib", tb_path)
-            self.tree_bank.load(tb_path)
+        """
+        Loads the complete artifact set named by model_dir/manifest.json.
+        Every artifact is required and hash-verified; a missing, tampered or
+        inconsistent artifact raises ModelArtifactError instead of silently
+        leaving an unfitted or freshly initialised component in place.
+        """
+        self.manifest = load_manifest(model_dir)
+        self.tree_bank = load_verified_tree_bank(model_dir, self.manifest)
 
         if self.manifest.spatial_artifact_dir:
             # Verify both files of the pair before loading either
             spatial_dir = os.path.join(model_dir, self.manifest.spatial_artifact_dir)
             for filename in ("hypernet.pt", "gnn.pt"):
                 rel = f"{self.manifest.spatial_artifact_dir}/{filename}"
-                _verify_file(rel, os.path.join(spatial_dir, filename), required=True)
+                _verify_recorded_hash(self.manifest, rel, os.path.join(spatial_dir, filename))
             self.spatial.load(spatial_dir)
         elif any(os.path.exists(os.path.join(model_dir, f)) for f in ("hypernet.pt", "gnn.pt")):
             raise ValueError(
@@ -360,8 +418,9 @@ class ArchitecturePipeline:
                 f"is incompatible with {self.hypernet.version}/{self.gnn.version}. "
                 "Run `python -m crowd_reliability.cli spatial-init` to create a compatible pair."
             )
+        else:
+            raise ModelArtifactError(f"Manifest in {model_dir} names no spatial_artifact_dir")
 
         tm_path = os.path.join(model_dir, "temporal_model.pt")
-        if os.path.exists(tm_path):
-            _verify_file("temporal_model.pt", tm_path)
-            self.temporal_model = MultivariateTemporalForecaster.load(tm_path)
+        _verify_recorded_hash(self.manifest, "temporal_model.pt", tm_path)
+        self.temporal_model = MultivariateTemporalForecaster.load(tm_path)

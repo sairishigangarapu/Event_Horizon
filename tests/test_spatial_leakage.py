@@ -27,9 +27,6 @@ def scenario_data():
 
 def _step_snapshot(pipeline, sc, as_of, obs):
     pipeline.history_buffer.clear()  # no rolling state shared between compared calls
-    # step() does not switch the GRU to eval mode, so its dropout makes forecasts nondeterministic
-    # (reported to the temporal owner); comparisons here need deterministic inference.
-    pipeline.temporal_model.eval()
     trees, forecasts = pipeline.step(sc.scenario_id, as_of, obs)
     return (
         [t.channel_values for t in trees],
@@ -154,7 +151,10 @@ def test_smoke_trained_pair_cannot_become_active(tmp_path):
 
 @pytest.fixture
 def model_dir(tmp_path, monkeypatch):
+    from crowd_reliability.ml.pipeline import load_verified_tree_bank
     pipeline = ArchitecturePipeline(venue=get_default_venue())
+    # save_pipeline refuses an unfitted tree bank; reuse the fitted production bank.
+    pipeline.tree_bank = load_verified_tree_bank(os.path.join("models", "production"))
     pipeline.save_pipeline(str(tmp_path))
     monkeypatch.setattr(settings, "model_dir", str(tmp_path))
     return tmp_path
