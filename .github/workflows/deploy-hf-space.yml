@@ -7,10 +7,8 @@ name: Test and deploy to Hugging Face Space
 #   - variable HF_SPACE_ID  the Space, e.g. your-hf-user/crowd-reliability
 # The deploy job is skipped until HF_SPACE_ID is set.
 
+# Legacy hosting remains manual; automatic deploys now target Railway.
 on:
-  push:
-    branches: [main]
-  pull_request:
   workflow_dispatch:
 
 concurrency:
@@ -42,9 +40,10 @@ jobs:
       - name: Stage Space files
         run: |
           mkdir _space
-          git archive HEAD Dockerfile requirements.deploy.txt crowd_reliability dashboard \
+          git archive HEAD requirements.deploy.txt crowd_reliability dashboard \
             models/production data/demo deploy/hf_space | tar -x -C _space
-          cp Dockerfile.dockerignore _space/.dockerignore
+          cp deploy/hf_space/Dockerfile _space/Dockerfile
+          cp deploy/hf_space/.dockerignore _space/.dockerignore
           cp deploy/hf_space/README.md _space/README.md
           find _space -type f | sort
       - name: Upload to the Space

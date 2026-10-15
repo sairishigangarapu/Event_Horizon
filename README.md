@@ -1,3 +1,7 @@
+# Railway deployment
+
+The integrated app is prepared for Railway: Studio at `/`, runtime dashboard at `/dashboard/`, health check at `/api/ready`. See [Railway setup](deploy/railway/README.md). Local Windows startup still uses START_WINDOWS.bat.
+
 # Windows rendering and audited pipeline update
 
 Read [FIXES_AND_TRAINING.md](FIXES_AND_TRAINING.md) for the corrected launcher, implemented audit fixes, selected synthetic model and limitations. Older audit/status sections below describe earlier snapshots.

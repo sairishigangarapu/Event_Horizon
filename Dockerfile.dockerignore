@@ -1,15 +1,23 @@
-# Build-context whitelist for the root Dockerfile (main app / Hugging Face Space).
-# BuildKit uses this file instead of the root .dockerignore (which belongs to Twin Studio).
-# The deploy workflow also copies it to .dockerignore in the Space.
 *
 !Dockerfile
-!requirements.deploy.txt
+!requirements.runtime.txt
+!requirements.railway.txt
 !crowd_reliability/
-!dashboard/
+!crowd_reliability/**
+!models/
 !models/production/
-!data/demo/
-!deploy/hf_space/
-**/__pycache__
+!models/production/**
+!models/candidates/
+!models/candidates/mc_v2/
+!models/candidates/mc_v2/**
+!runtime_frontend/
+!runtime_frontend/**
+!studio/
+!studio/**
+!runtime_server.py
+!hosted_server.py
+**/__pycache__/**
 **/*.pyc
 **/.env
-data/app.db
+studio/outputs/**
+studio/analysis/**
