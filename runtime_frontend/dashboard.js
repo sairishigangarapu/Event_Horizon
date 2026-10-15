@@ -35,6 +35,7 @@ function chart(rows){
  for(const [key,color] of [['central','#d58132'],['architecture','#416bb7'],['actual','#257653']]){ctx.strokeStyle=color;ctx.fillStyle=color;ctx.lineWidth=2;ctx.beginPath();let pen=false;for(const r of rows){if(r[key]===null){pen=false;continue;}if(!pen)ctx.moveTo(x(r.target_s),y(r[key]));else ctx.lineTo(x(r.target_s),y(r[key]));pen=true;}ctx.stroke();for(const r of rows){if(r[key]===null)continue;ctx.beginPath();ctx.arc(x(r.target_s),y(r[key]),2.5,0,Math.PI*2);ctx.fill();}}
 }
 async function poll(){try{
+ if(window.EHDashboard?.live)return;
  const sessions=await api('/api/runtime/sessions');$('session').replaceChildren(...sessions.map(s=>option(s.session_id,s.mode+' / '+s.run_id.slice(0,8)+' / '+s.time_s+'s')));
  if(followLatest&&sessions.length&&sessions.at(-1).session_id!==current){current=sessions.at(-1).session_id;version=-1;}
  if(!current&&sessions.length){current=sessions.at(-1).session_id;version=-1;}
@@ -42,6 +43,13 @@ async function poll(){try{
  if(current){$('session').value=current;const next=await api('/api/runtime/sessions/'+current);if(next.version!==version||!data){data=next;version=next.version;const old=$('zone').value;$('zone').replaceChildren(...data.venue.zones.map(z=>option(z.zone_id,z.name)));if(data.venue.zones.some(z=>z.zone_id===old))$('zone').value=old;$('empty').hidden=true;$('content').hidden=false;$('download').disabled=false;render();}}
  $('connection').textContent=current?'● Connected · simulator clock':'● Waiting for Studio';$('connection').dataset.error=false;
  }catch(e){$('connection').textContent=e.message+' · retrying';$('connection').dataset.error=true;}finally{setTimeout(poll,1000);}}
-$('session').onchange=()=>{followLatest=false;current=$('session').value;data=null;version=-1;history.replaceState(null,'','?session='+current);};
+$('session').onchange=()=>{window.EHDashboard.live=false;window.dispatchEvent(new Event('eh-world-detach'));followLatest=false;current=$('session').value;data=null;version=-1;history.replaceState(null,'','?session='+current);};
 for(const id of ['zone','variable','horizon'])$(id).onchange=render;
-$('download').onclick=()=>{if(current)location.href='/api/runtime/sessions/'+current+'/report.csv';};$('print').onclick=()=>window.print();window.addEventListener('resize',()=>{if(data)chart(filtered());});poll();
+$('download').onclick=()=>{if(current)location.href='/api/runtime/sessions/'+current+'/report.csv';};$('print').onclick=()=>window.print();window.addEventListener('resize',()=>{if(data)chart(filtered());});window.EHDashboard={live:false,apply(next){
+ this.live=true;current=next.session_id;followLatest=false;data=next;version=next.version;
+ $('session').replaceChildren(option(current,'Live twin / '+next.time_s+'s'));
+ const old=$('zone').value;$('zone').replaceChildren(...next.venue.zones.map(z=>option(z.zone_id,z.name)));
+ if(next.venue.zones.some(z=>z.zone_id===old))$('zone').value=old;
+ $('empty').hidden=true;$('content').hidden=false;$('download').disabled=false;
+ $('connection').textContent='● Connected · live twin';$('connection').dataset.error=false;render();
+}};poll();

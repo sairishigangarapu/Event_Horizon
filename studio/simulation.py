@@ -119,7 +119,7 @@ def grid(agents,scale):
         cells[key]['count']+=1
     return cells
 
-def simulate(c,mode):
+def live_steps(c,mode):
     validate(c)
     if mode not in ['ideal','custom','random']:raise ValueError('Unknown run mode.')
     random=RNG(c['seed']);routes=c['routes'];paths=[path(x,c['scale']) for x in routes]
@@ -134,7 +134,18 @@ def simulate(c,mode):
         for i in range(int(e['people'])):
             uid+=1;schedules.append({'time':e['start']+math.floor(i/e['people']*(e['end']-e['start'])),'ri':ri,'at':e['at']*paths[ri]['length'],'speed':routes[ri]['speed']*(.85+random.next()*.3),'id':uid})
     schedules.sort(key=lambda s:(s['time'],s['id']));cursor=0;pending=[];outgoing=[0]*len(routes);blocked=[0]*len(routes);completed=[0]*len(routes);prevented=0;violations=[]
+    scheduled_events={e['id'] for e in events}
     for t in range(int(c['duration'])+1):
+        # Live operator actions are appended with future start times only.
+        for e in events:
+            if e['id'] in scheduled_events:continue
+            scheduled_events.add(e['id'])
+            if e['type']!='surge':continue
+            ri=next(i for i,r in enumerate(routes) if r['id']==e['routeId'])
+            for i in range(int(e['people'])):
+                uid+=1;schedules.append({'time':e['start']+math.floor(i/e['people']*(e['end']-e['start'])),'ri':ri,'at':e['at']*paths[ri]['length'],'speed':routes[ri]['speed']*(.85+random.next()*.3),'id':uid})
+        schedules.sort(key=lambda s:(s['time'],s['id']))
+        closures=barriers(c,events,paths)
         active_blocks=[[] for _ in routes]
         for b in closures:
             if not b['start']<=t<b['end']:continue
@@ -160,6 +171,7 @@ def simulate(c,mode):
             if key in wg:wg[key]['count']+=1
             else:wg[key]={'ri':a['ri'],'at':a['at'],'count':1}
         waiting_frames.append(list(wg.values()))
+        yield {'mode':mode,'events':events,'barriers':closures,'frames':frames,'waitingFrames':waiting_frames,'rows':rows,'total':uid,'completed':sum(completed),'waiting':len(pending),'active':len(active),'peakQueue':max(r['queued'] for r in rows),'audit':{'preventedMoves':prevented,'violations':violations},'modelVersion':'kinematic-v3'}
         if t==c['duration']:break
         outgoing=[0]*len(routes);blocked=[0]*len(routes)
         for ri,route in enumerate(routes):
@@ -179,6 +191,11 @@ def simulate(c,mode):
                 if a['s']>=paths[ri]['length']-EPS:a['done']=True;outgoing[ri]+=1;completed[ri]+=1
     final=rows[-len(routes):]
     return {'mode':mode,'events':events,'barriers':closures,'frames':frames,'waitingFrames':waiting_frames,'rows':rows,'total':uid,'completed':sum(completed),'waiting':len(pending),'active':sum(r['active'] for r in final),'peakQueue':max(r['queued'] for r in rows),'audit':{'preventedMoves':prevented,'violations':violations},'modelVersion':'kinematic-v3'}
+
+def simulate(c,mode):
+    result=None
+    for result in live_steps(c,mode):pass
+    return result
 
 def normalize_routes(payload,scale=.1):
     if not isinstance(payload,dict) or not isinstance(payload.get('routes'),list): raise ValueError('Route JSON must contain a routes array.')

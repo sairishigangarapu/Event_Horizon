@@ -1,3 +1,11 @@
+## Live twin and forecasting dashboard
+
+Open `/dashboard/` for crowd movement and backend forecasting on the same page. Click **Start demo**, then add a surge, block an exit or reopen it while the clock runs. Pause stops both clocks. **New run** creates a separate session. Use **Load scene** for a Studio JSON export, or **Use Studio scene** for the scene saved in the same browser.
+
+The server advances the existing kinematic engine one second at a time. It generates delayed/missing/noisy camera, sensor and warden reports and supplies only released reports to the existing model. Predictions update every five seconds. Exact states are sent separately to retrospective evaluation after inference. The visual world is synthetic and operator-visible; it is not synchronized to real CCTV. Logical data separation does not provide process-level access control.
+
+Live demo bounds: 300 seconds, 600 initial agents, 3,000 total scheduled agents and 30 runtime sessions per service process. Processing can slow wall-clock playback; no simulation ticks are skipped. Sessions remain in memory and disappear on service restart.
+
 # Railway deployment
 
 The integrated app is prepared for Railway: Studio at `/`, runtime dashboard at `/dashboard/`, health check at `/api/ready`. See [Railway setup](deploy/railway/README.md). Local Windows startup still uses START_WINDOWS.bat.
