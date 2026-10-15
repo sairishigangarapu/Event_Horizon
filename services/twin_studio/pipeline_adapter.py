@@ -22,9 +22,9 @@ Contract:
     mask 0 (unavailable). The hypernetwork/GNN/GRU are deterministic seeded initialisations,
     status "untrained_initial". See models/environments/eh_twin_studio/environment_manifest.json.
   * Determinism: torch init is seeded inside a forked RNG, and all modules are put in eval()
-    mode. The upstream GRU (crowd_reliability/ml/temporal.py, Person 4) is constructed in train
-    mode with inter-layer dropout and step() does not call eval(); this adapter calls
-    temporal_model.eval() itself instead of modifying Person 4's module.
+    mode. The main pipeline and this adapter both enforce eval() at serving boundaries.
+    Pipeline timestamps use normalized naive UTC; adapter offsets normalize both
+    sides explicitly before calculating whole simulated seconds.
 """
 from __future__ import annotations
 
@@ -36,6 +36,7 @@ from pathlib import Path
 from typing import Iterable
 
 from services.twin_studio import ENVIRONMENT_ID, MAP_VERSION
+from crowd_reliability.contracts import utc as pipeline_utc
 from services.twin_studio.bundle import OBS_RECORD_FIELDS
 from services.twin_studio.observations import SCHEMA_VERSION
 
@@ -182,7 +183,7 @@ class TwinArchitectureRunner:
         _, forecasts = self.pipeline.step(self.run_id, as_of, records)
         rows = []
         for f in forecasts:
-            target = int(round((f.target_at - self.epoch).total_seconds()))
+            target = int(round((pipeline_utc(f.target_at) - pipeline_utc(self.epoch)).total_seconds()))
             twin_var = PIPELINE_TO_TWIN_VARIABLE[f.variable]
             rows.append(ForecastRow(f.zone_id, twin_var, target - issue_second, issue_second, target,
                                     float(f.value), EXPECTED_TWIN_UNIT[twin_var]))

@@ -51,7 +51,9 @@ class LabHandler(SimpleHTTPRequestHandler):
         super().do_GET()
     def runtime_proxy(self,method,body=None):
         base=os.environ.get('EH_RUNTIME_URL','http://127.0.0.1:8001')
-        request=urllib.request.Request(base+self.path,data=body,method=method,headers={'Content-Type':'application/json'})
+        headers={'Content-Type':'application/json'}
+        if self.headers.get('X-API-Key'):headers['X-API-Key']=self.headers['X-API-Key']
+        request=urllib.request.Request(base+self.path,data=body,method=method,headers=headers)
         try:
             with urllib.request.urlopen(request,timeout=60) as response:
                 payload=response.read()

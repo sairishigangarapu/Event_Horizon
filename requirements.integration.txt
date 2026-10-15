@@ -1,0 +1,6 @@
+# Complete local/CI verification, including the preserved legacy dashboard and Twin v3 APIs.
+-r requirements.txt
+-r requirements.railway.txt
+-r deploy/twin_studio/requirements.txt
+
+PyYAML>=6,<7

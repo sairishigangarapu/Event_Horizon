@@ -1,7 +1,7 @@
 """
 synthetic.py – Reproducible synthetic scenarios for Person 4 smoke tests.
 
-DISCLAIMER: Synthetic scaffold only. NOT for real-world use.
+NOTE: Generates reproducible synthetic scenarios for Person 4 smoke tests and evaluation.
 
 Generates:
   - Mock observation snapshots (as-of report snapshots) with realistic dynamics.

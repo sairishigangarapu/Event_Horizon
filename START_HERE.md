@@ -1,3 +1,17 @@
+# Current integrated launch
+
+Use `START_REVIEW_WINDOWS.bat` (Python 3.11/3.12), or `python start_review.py`. It opens the combined random-flow and forecasting dashboard on a printed localhost URL. Studio is at the same origin's `/` route. First start installs CPU dependencies; no publishing occurs.
+
+The dashboard generates constrained curved routes from density, direction, duration and seed; hidden random incidents become visible only as the world reaches them. Forecasting sees only released observation reports. Compare clearance actions pauses the world and tests estimates from current reports. The model is experimental, and the recorded curved stress tests include missed warnings and false alarms.
+
+Current contracts, model-directory distinctions and known missing feedback/promotion features are in [docs/IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md), [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and [docs/INTEGRATION_AUDIT_RECONCILIATION.md](docs/INTEGRATION_AUDIT_RECONCILIATION.md).
+
+---
+
+## Historical two-service Studio launch instructions
+
+The instructions below describe the earlier manual-route/replay mode. Its original `models/production` checkpoint is untrained; the combined review launcher instead selects the separate historical synthetic `models/candidates/mc_v2` checkpoint. Neither is a validated model for arbitrary venues.
+
 # Event Horizon — integrated simulator and backend runtime
 
 ## Start on Windows

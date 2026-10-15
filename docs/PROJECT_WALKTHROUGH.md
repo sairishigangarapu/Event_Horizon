@@ -1,3 +1,5 @@
+> Historical handoff notes. Current integrated behavior and validation status are recorded in [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md) and [INTEGRATION_AUDIT_RECONCILIATION.md](INTEGRATION_AUDIT_RECONCILIATION.md). Statements below about active versions, untrained stages or incomplete wiring may describe the earlier snapshot.
+
 # Event Horizon: project walkthrough and presenter's guide
 
 **Project:** Crowd Disaster Information Reliability (repository `MKCrusaders26`, Manipal Hackathon 2026, Round 2).

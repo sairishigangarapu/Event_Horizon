@@ -6,15 +6,15 @@ from pydantic import BaseModel, Field
 
 class PipelineManifest(BaseModel):
     pipeline_version: str = "v1.0.0"
-    tree_version: str = "dt_bank_v1"
+    tree_version: str = "dt_bank_v2"
     hypernet_version: str = "hypernet_v2"
     gnn_version: str = "gnn_edge_v2"
     temporal_version: str = "gru_forecaster_v1"
-    scaler_version: Optional[str] = "standard_scaler_v1"
+    scaler_version: Optional[str] = "scaler_obs_only_v1"
     schema_version: str = "v1.0"
     training_cutoff: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     scenario_split: str = "production"
-    is_active: bool = True
+    is_active: bool = False
     model_hashes: Dict[str, str] = Field(default_factory=dict)
     metrics_summary: Optional[Dict[str, Any]] = None
     # Fit status per component, e.g. {"hypernet": "untrained_initial"}; never implies validation

@@ -1,3 +1,19 @@
+# Event Horizon — integrated entry points
+
+Start locally with Python 3.11/3.12: `python start_review.py` (Windows: `START_REVIEW_WINDOWS.bat`). The launcher opens `/dashboard/`, where density, direction, duration and seed control the curved random-flow world and the existing forecasting backend. Studio remains at `/`.
+
+For an already prepared environment: `python -m uvicorn hosted_server:app --host 127.0.0.1 --port 8000 --workers 1`. Set `MODEL_DIR` explicitly to choose a compatible artifact directory. Defaults for hosted/local review use the historical synthetic mc_v2 checkpoint; custom-route prediction is experimental and the recorded stress runs include missed advance warnings.
+
+Read [current architecture](docs/ARCHITECTURE.md), [implementation status](docs/IMPLEMENTATION_STATUS.md) and [integration/audit evidence](docs/INTEGRATION_AUDIT_RECONCILIATION.md) before the historical setup notes below. The main branch preserves Twin Studio v3 as a separate environment; its models and A* recommendations are not silently substituted into the route-based live model.
+
+Optional protected mode: `AUTH_MODE=api_key` plus an independently generated `APP_API_KEY`. Use the dashboard/Studio **API access** button to supply it for the browser session. `CENTRAL_API_KEY` is only upstream-provider configuration. `APP_ENV=production` uses explicit `python -m crowd_reliability db-init`; local demo startup initializes the DB and additively upgrades forecast mask columns. Production API requests use a bounded process-local token bucket (default 600/minute); configure `API_RATE_LIMIT_PER_MINUTE` for your workload.
+
+Full verification: install CPU torch, then `pip install -r requirements.integration.txt`; run `pytest tests -q`, `pytest person4/tests -q`, `python verify_hosted.py`, `python verify_roundtrip.py` and `python verify_random_flow.py`. Live MinIO/network integration requires the separate documented Compose test environment.
+
+Railway's live source remains **bugbounty**. Main receives tested integration code; its CI workflow does not deploy. Publishing the new frontend requires separate approval and promotion to the deployment branch.
+
+---
+
 # Railway deployment
 
 The integrated app is prepared for Railway: Studio at `/`, runtime dashboard at `/dashboard/`, health check at `/api/ready`. See [Railway setup](deploy/railway/README.md). Local Windows startup still uses START_WINDOWS.bat.

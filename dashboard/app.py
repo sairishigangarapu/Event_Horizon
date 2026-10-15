@@ -1,4 +1,5 @@
 import os
+import html
 import json
 import streamlit as st
 import pandas as pd
@@ -293,7 +294,10 @@ with tab_venue:
         gy = geom.get("y", np.random.randint(50, 400))
         node_x.append(gx)
         node_y.append(gy)
-        node_text.append(f"<b>{z.name}</b><br>ID: {z.zone_id}<br>Type: {z.zone_type}<br>Capacity: {z.capacity_definition} p")
+        esc_name = html.escape(str(z.name))
+        esc_id = html.escape(str(z.zone_id))
+        esc_type = html.escape(str(z.zone_type))
+        node_text.append(f"<b>{esc_name}</b><br>ID: {esc_id}<br>Type: {esc_type}<br>Capacity: {z.capacity_definition} p")
 
         # Color based on zone type
         colors = {"entrance": "#2ca02c", "corridor": "#1f77b4", "assembly": "#9467bd", "stairway": "#8c564b", "exit": "#d62728"}
@@ -301,7 +305,7 @@ with tab_venue:
 
     edge_x = []
     edge_y = []
-    zone_pos = {z.zone_id: (z.geometry.get("x", 0), z.geometry.get("y", 0)) for z in zones}
+    zone_pos = {z.zone_id: ((z.geometry or {}).get("x", 0), (z.geometry or {}).get("y", 0)) for z in zones}
 
     for c in connections:
         if c.from_zone in zone_pos and c.to_zone in zone_pos:

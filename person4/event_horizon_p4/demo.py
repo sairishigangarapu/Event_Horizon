@@ -1,7 +1,7 @@
 """
 demo.py – End-to-end smoke test.
 
-DISCLAIMER: Synthetic scaffold only. NOT for real-world use.
+NOTE: End-to-end smoke test demonstration for Person 4 modules.
 
 Usage:
     python -m event_horizon_p4.demo --checkpoint artifacts/temporal_mock.pt --epochs 2

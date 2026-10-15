@@ -14,6 +14,8 @@ RUN useradd --create-home --uid 1000 appuser
 COPY --chown=appuser:appuser crowd_reliability ./crowd_reliability
 COPY --chown=appuser:appuser models/production ./models/production
 COPY --chown=appuser:appuser models/candidates/mc_v2 ./models/candidates/mc_v2
+COPY --chown=appuser:appuser services ./services
+COPY --chown=appuser:appuser models/environments ./models/environments
 COPY --chown=appuser:appuser runtime_frontend ./runtime_frontend
 COPY --chown=appuser:appuser studio ./studio
 COPY --chown=appuser:appuser runtime_server.py hosted_server.py ./

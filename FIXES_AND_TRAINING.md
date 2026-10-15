@@ -1,3 +1,5 @@
+> Historical integrated-package change log. The preserved mc_v2 experiment below searched joint configurations. The current trainer selects tree parameters only, uses scenario-level out-of-sample tree features and fixes the neural configuration. Current status: [docs/IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md).
+
 # Integrated update: Windows rendering and adversarial fixes
 
 This update modifies the Integrated package, preserving the venue floor plan, Clear all routes control, separate Studio and Runtime Dashboard, user routes, three scenarios, heatmaps and master report.

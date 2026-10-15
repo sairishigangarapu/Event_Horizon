@@ -1,10 +1,15 @@
 import os
+import threading
 from datetime import datetime, timezone
 from typing import List, Dict, Any, Optional
-from fastapi import FastAPI, Depends, HTTPException, Query
+from fastapi import FastAPI, Depends, HTTPException, Query, Security, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import APIKeyHeader
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, aliased
+from sqlalchemy import and_, func
+from crowd_reliability.contracts import utc
 
 from crowd_reliability.config import settings
 from crowd_reliability.database import get_db, init_db, SessionLocal
@@ -35,7 +40,10 @@ from contextlib import asynccontextmanager
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    init_db()
+    # F-023: In production environments, database schema should be managed via migrations
+    # or explicit CLI 'db-init'; only auto-create in demo/development/test modes.
+    if getattr(settings, "app_env", "demo") in ("demo", "test", "development"):
+        init_db()
     yield
 
 app = FastAPI(
@@ -44,6 +52,46 @@ app = FastAPI(
     version="0.1.0",
     lifespan=lifespan
 )
+
+@app.middleware("http")
+async def add_security_headers(request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "same-origin"
+    return response
+
+from crowd_reliability.auth import verify_auth, check_api_key
+from crowd_reliability.rate_limit import ApiRateLimit
+from crowd_reliability.body_limit import ApiBodyLimit
+app.add_middleware(ApiBodyLimit)
+_API_LIMIT=ApiRateLimit()
+
+@app.middleware("http")
+async def shared_api_boundary(request, call_next):
+    if request.url.path.startswith('/api/') and request.method!='OPTIONS':
+        if settings.app_env not in ('demo','test','development') and settings.api_rate_limit_per_minute>0 and request.url.path not in ('/api/ready','/api/health'):
+            client=request.client.host if request.client else 'unknown'
+            if not _API_LIMIT.allow(client,settings.api_rate_limit_per_minute):
+                return JSONResponse(status_code=429,content={'detail':'API request rate exceeded; retry shortly.'},headers={'Retry-After':'1'})
+        if request.url.path not in ('/api/ready','/api/runtime-config','/api/health'):
+            try:check_api_key(request.headers.get('X-API-Key'))
+            except HTTPException as exc:return JSONResponse(status_code=exc.status_code,content={'detail':exc.detail})
+        origin=request.headers.get('Origin')
+        if request.method not in ('GET','HEAD') and origin:
+            same_origin=str(request.base_url).rstrip('/')
+            if origin.rstrip('/')!=same_origin and origin not in ALLOWED_ORIGINS:
+                return JSONResponse(status_code=403,content={'detail':'Cross-origin mutation is not allowed.'})
+    return await call_next(request)
+
+@app.exception_handler(Exception)
+async def generic_exception_handler(request, exc):
+    if isinstance(exc, HTTPException):
+        return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Internal server error"}
+    )
 
 ALLOWED_ORIGINS = [
     "http://127.0.0.1:8501",
@@ -73,7 +121,7 @@ def get_root():
         "status": "operational"
     }
 
-@app.get("/api/scenarios")
+@app.get("/api/scenarios", dependencies=[Depends(verify_auth)])
 def list_scenarios():
     return [
         {
@@ -86,7 +134,7 @@ def list_scenarios():
         for sc in SCENARIO_PRESETS.values()
     ]
 
-@app.get("/api/venue")
+@app.get("/api/venue", dependencies=[Depends(verify_auth)])
 def get_venue(db: Session = Depends(get_db)):
     zones = db.query(ZoneRecord).all()
     connections = db.query(ConnectionRecord).all()
@@ -121,28 +169,19 @@ def get_venue(db: Session = Depends(get_db)):
 @app.get("/api/manifest")
 def get_active_manifest(db: Session = Depends(get_db)):
     manifest_rec = db.query(ModelManifestRecord).filter(ModelManifestRecord.is_active == True).first()
-    if not manifest_rec:
-        return {**PipelineManifest().model_dump(), **_artifact_status()}
-    return {
-        "pipeline_version": manifest_rec.pipeline_version,
-        "tree_version": manifest_rec.tree_version,
-        "hypernet_version": manifest_rec.hypernet_version,
-        "gnn_version": manifest_rec.gnn_version,
-        "temporal_version": manifest_rec.temporal_version,
-        "scaler_version": manifest_rec.scaler_version,
-        "schema_version": manifest_rec.schema_version,
-        "training_cutoff": manifest_rec.training_cutoff.isoformat() if manifest_rec.training_cutoff else None,
-        "scenario_split": manifest_rec.scenario_split,
-        "model_hashes": manifest_rec.model_hashes or {},
-        **_artifact_status(),
-    }
+    try:serving=load_manifest(settings.model_dir)
+    except ModelArtifactError as exc:raise HTTPException(503,'Serving manifest is unavailable.') from exc
+    result={**serving.model_dump(mode='json'),**_artifact_status()}
+    result['registry_pipeline_version']=manifest_rec.pipeline_version if manifest_rec else None
+    result['registry_matches_serving']=manifest_rec.pipeline_version==serving.pipeline_version if manifest_rec else None
+    return result
 
-@app.get("/api/forecasts")
+@app.get("/api/forecasts", dependencies=[Depends(verify_auth)])
 def get_forecasts(
     scenario_id: str = "crowd_surge",
     zone_id: Optional[str] = None,
     variable: Optional[str] = None,
-    limit: int = Query(default=500, ge=1, le=5000),
+    limit: int = Query(default=500, ge=1, le=1000),
     offset: int = Query(default=0, ge=0),
     as_of: Optional[str] = None,
     db: Session = Depends(get_db)
@@ -154,15 +193,28 @@ def get_forecasts(
     if variable:
         query = query.filter(ForecastRecord.variable == variable)
 
-    records = query.order_by(ForecastRecord.target_at.asc()).all()
-    arch_recs = [r for r in records if r.stream_id == "stream_b_architecture"]
-    cent_recs = [r for r in records if r.stream_id == "stream_a_central"]
-
-    try:cutoff=datetime.fromisoformat(as_of) if as_of else datetime.now(timezone.utc)
+    try:cutoff=utc(datetime.fromisoformat(as_of)) if as_of else utc(datetime.now(timezone.utc))
     except ValueError:raise HTTPException(422,'Invalid as_of timestamp.')
-    diffs = comparator.align_and_compare(arch_recs, cent_recs,as_of_time=cutoff)
-    total_comparisons = len(diffs)
-    paginated_diffs = diffs[offset : offset + limit]
+    query=query.filter(ForecastRecord.stream_id.in_(['stream_b_architecture','stream_a_central']),
+        ForecastRecord.received_at<=cutoff,ForecastRecord.issued_at<=cutoff)
+    # Page physical forecast keys in SQL; never load an entire scenario to slice it.
+    columns=[ForecastRecord.scenario_id,ForecastRecord.zone_id,ForecastRecord.variable,
+        ForecastRecord.unit,ForecastRecord.issued_at,ForecastRecord.target_at]
+    distinct_keys=query.with_entities(*columns).distinct()
+    total_comparisons=distinct_keys.count()
+    page=distinct_keys.order_by(*columns).offset(offset).limit(limit).subquery()
+    match=and_(*(column==getattr(page.c,column.key) for column in columns))
+    ranked=query.join(page,match).add_columns(func.row_number().over(
+        partition_by=[ForecastRecord.stream_id,*columns],
+        order_by=[ForecastRecord.received_at.desc(),ForecastRecord.forecast_id.desc(),ForecastRecord.id.desc()]
+    ).label('_revision_rank')).subquery()
+    forecast=aliased(ForecastRecord,ranked)
+    records=db.query(forecast).filter(ranked.c._revision_rank==1).all()
+    arch_recs=[r for r in records if r.stream_id=='stream_b_architecture']
+    cent_recs=[r for r in records if r.stream_id=='stream_a_central']
+    paginated_diffs=comparator.align_and_compare(arch_recs,cent_recs,as_of_time=cutoff)
+    count_arch=query.filter(ForecastRecord.stream_id=='stream_b_architecture').count()
+    count_cent=query.filter(ForecastRecord.stream_id=='stream_a_central').count()
 
     return {
         "scenario_id": scenario_id,
@@ -172,8 +224,8 @@ def get_forecasts(
         "limit": limit,
         "offset": offset,
         "stream_b_status": stream_b_status,
-        "count_arch": len(arch_recs),
-        "count_cent": len(cent_recs),
+        "count_arch": count_arch,
+        "count_cent": count_cent,
         "comparisons": [
             {
                 "zone_id": d.zone_id,
@@ -186,16 +238,23 @@ def get_forecasts(
                 "abs_diff": d.abs_diff,
                 "arch_issue_time": d.arch_forecast.issued_at.isoformat() if d.arch_forecast else None,
                 "cent_issue_time": d.cent_forecast.issued_at.isoformat() if d.cent_forecast else None,
+                "arch_model_version": d.arch_forecast.model_or_provider_version if d.arch_forecast else None,
+                "cent_model_version": d.cent_forecast.model_or_provider_version if d.cent_forecast else None,
+                "arch_channel_mask": d.arch_forecast.channel_mask if d.arch_forecast else None,
+                "cent_channel_mask": d.cent_forecast.channel_mask if d.cent_forecast else None,
+                "arch_missing_data_mask": d.arch_forecast.missing_data_mask if d.arch_forecast else None,
+                "cent_missing_data_mask": d.cent_forecast.missing_data_mask if d.cent_forecast else None,
             }
             for d in paginated_diffs
         ]
     }
 
-@app.get("/api/assessments")
+@app.get("/api/assessments", dependencies=[Depends(verify_auth)])
 def get_assessments(
     scenario_id: str = "crowd_surge",
     zone_id: Optional[str] = None,
     evaluated_at: Optional[str] = None,
+    include_provenance: bool = False,
     db: Session = Depends(get_db)
 ):
     obs_query = db.query(ObservationRecord).filter(ObservationRecord.scenario_id == scenario_id)
@@ -221,11 +280,17 @@ def get_assessments(
     # Variables to assess
     variables = ["density", "speed", "inflow", "outflow", "queue_length", "exit_open"]
     zones_to_eval = [zone_id] if zone_id else list(set(o.zone_id for o in observations))
+    zones_lookup = {z.zone_id: z.zone_type for z in db.query(ZoneRecord).all()}
 
     assessments = []
     for z in zones_to_eval:
+        z_type = zones_lookup.get(z)
         for v in variables:
-            rec = comparator.assess_information(observations, t_eval, z, v)
+            rec = comparator.assess_information(
+                observations, t_eval, z, v,
+                zone_type=z_type,
+                scenario_type=scenario_id
+            )
             assessments.append({
                 "zone_id": z,
                 "variable": v,
@@ -233,31 +298,33 @@ def get_assessments(
                 "observation_age_seconds": rec.observation_age_seconds,
                 "conflict_count": len(rec.conflict_ids or []),
                 "coverage": rec.coverage,
+                "coverage_basis": getattr(rec,"coverage_basis","No received source roster"),
+                "conflict_graph": getattr(rec,"conflict_graph",{}) if include_provenance else {k:v for k,v in getattr(rec,"conflict_graph",{}).items() if k.startswith("num_")},
                 "flags": rec.per_variable_flags
             })
 
     return {"scenario_id": scenario_id, "evaluated_at": t_eval.isoformat(), "assessments": assessments}
 
-@app.get("/api/metrics")
+@app.get("/api/metrics", dependencies=[Depends(verify_auth)])
 def get_metrics(
     scenario_id: str = "crowd_surge",
     evaluated_at: Optional[str] = None,
     db: Session = Depends(get_db)
 ):
+    try:cutoff=utc(datetime.fromisoformat(evaluated_at)) if evaluated_at else utc(datetime.now(timezone.utc))
+    except ValueError:raise HTTPException(422,'Invalid evaluated_at timestamp.')
     forecasts = db.query(ForecastRecord).filter(ForecastRecord.scenario_id == scenario_id).all()
     reference_states = db.query(ReferenceStateRecord).filter(ReferenceStateRecord.scenario_id == scenario_id).all()
-
     if not forecasts or not reference_states:
         return {"scenario_id": scenario_id, "metrics": {}}
 
-    try:cutoff=datetime.fromisoformat(evaluated_at) if evaluated_at else datetime.now(timezone.utc)
-    except ValueError:raise HTTPException(422,'Invalid evaluated_at timestamp.')
     res = evaluator.score_predictions(forecasts, reference_states,evaluation_time=cutoff)
     return {"scenario_id": scenario_id, "metrics": res}
 
 # --- Shared interface freeze (PDF Section G) additions -----------------------
 
 _TREE_BANK_CACHE: Dict[str, Any] = {}
+_TREE_BANK_LOCK = threading.Lock()
 
 
 def _load_tree_bank() -> DecisionTreeBank:
@@ -266,10 +333,16 @@ def _load_tree_bank() -> DecisionTreeBank:
     pipeline loads (crowd_reliability.ml.pipeline.load_verified_tree_bank).
     Raises ModelArtifactError instead of falling back to an unfitted bank.
     """
-    key = os.path.abspath(settings.model_dir)
-    if key not in _TREE_BANK_CACHE:
-        _TREE_BANK_CACHE[key] = load_verified_tree_bank(settings.model_dir)
-    return _TREE_BANK_CACHE[key]
+    root=os.path.abspath(settings.model_dir)
+    manifest=load_manifest(root)
+    try:stamp=os.stat(os.path.join(root,'tree_bank.joblib'))
+    except OSError as exc:raise ModelArtifactError('Missing tree bank artifact.') from exc
+    key=(root,manifest.model_hashes.get('tree_bank.joblib'),stamp.st_mtime_ns,stamp.st_size)
+    with _TREE_BANK_LOCK:
+        if key not in _TREE_BANK_CACHE:
+            _TREE_BANK_CACHE.clear()  # The serving process retains one verified active bank.
+            _TREE_BANK_CACHE[key] = load_verified_tree_bank(settings.model_dir)
+        return _TREE_BANK_CACHE[key]
 
 
 def _artifact_status() -> Dict[str, Any]:

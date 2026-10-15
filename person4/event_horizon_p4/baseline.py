@@ -1,7 +1,7 @@
 """
 baseline.py – Persistence and moving-average forecasting baselines.
 
-DISCLAIMER: Synthetic scaffold only. NOT for real-world use.
+NOTE: Persistence and moving-average forecasting baselines for Person 4 comparisons.
 
 Baselines:
   1. PersistenceBaseline     – last observed value repeated for all horizons.

@@ -1,7 +1,8 @@
 """
 evaluation.py – Delayed reference scoring: MAE/RMSE + exit classification metrics.
 
-DISCLAIMER: Synthetic scaffold only. NOT for real-world use.
+NOTE: Reference evaluation and metrics module. Enforces label availability
+delay gates and produces separated numeric and exit classification metrics.
 
 Contract:
   - Reference metrics are calculated ONLY after label_available_at time.
@@ -17,12 +18,13 @@ from __future__ import annotations
 
 from collections import defaultdict
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 
 from .config import HORIZONS_SEC, VAR_NAMES, VAR_UNITS
+from .utils import to_naive_utc
 from .inference import ForecastRecord
 from .synthetic import MockReferenceState
 
@@ -91,28 +93,26 @@ class EvaluationReport:
 # Reference lookup helper
 # ---------------------------------------------------------------------------
 
-def _as_naive(dt: datetime) -> datetime:
-    if dt.tzinfo is not None:
-        return dt.astimezone(timezone.utc).replace(tzinfo=None)
-    return dt
+# _as_naive is now provided by utils.to_naive_utc (BUG-03 consolidation).
 
 
 def build_reference_lookup(
     reference_states: List[Any],
-) -> Dict[Tuple[str, str, str, datetime], Any]:
+) -> Dict[Tuple[str, str, str, datetime, str], Any]:
     """
     Builds a lookup dictionary keyed by:
-        (scenario_id, zone_id, variable, state_at)
+        (scenario_id, zone_id, variable, state_at, unit)
 
     This allows O(1) matching from ForecastRecord.target_at == state_at.
     """
-    lookup: Dict[Tuple[str, str, str, datetime], Any] = {}
+    lookup: Dict[Tuple[str, str, str, datetime, str], Any] = {}
     for ref in reference_states:
         key = (
             ref.scenario_id,
             ref.zone_id,
             ref.variable,
-            _as_naive(ref.state_at),
+            to_naive_utc(ref.state_at),
+            ref.unit,
         )
         lookup[key] = ref
     return lookup
@@ -150,7 +150,7 @@ class ReferenceEvaluator:
             EvaluationReport with separate numeric and exit metrics.
         """
         ref_lookup = build_reference_lookup(reference_states)
-        et = _as_naive(evaluation_time) if evaluation_time else None
+        et = to_naive_utc(evaluation_time) if evaluation_time else None
 
         # Accumulate per (variable, horizon_sec)
         # For numeric: lists of (pred, true)
@@ -162,12 +162,19 @@ class ReferenceEvaluator:
         n_label_wait = 0
         n_no_label   = 0
 
+        revisions={}
         for fc in forecasts:
+            if et is not None and (to_naive_utc(fc.issued_at)>et or to_naive_utc(fc.received_at)>et):continue
+            k=(fc.scenario_id,fc.zone_id,fc.variable,fc.unit,to_naive_utc(fc.issued_at),to_naive_utc(fc.target_at),fc.horizon_sec,fc.stream_id)
+            rank=(to_naive_utc(fc.received_at),str(fc.forecast_id),str(fc.model_version))
+            if k not in revisions or rank>revisions[k][0]:revisions[k]=(rank,fc)
+        for _,fc in revisions.values():
             key = (
                 fc.scenario_id,
                 fc.zone_id,
                 fc.variable,
-                _as_naive(fc.target_at),
+                to_naive_utc(fc.target_at),
+                fc.unit,
             )
             ref = ref_lookup.get(key)
 
@@ -176,8 +183,8 @@ class ReferenceEvaluator:
                 continue
 
             # Enforce label availability delay
-            ref_avail = _as_naive(ref.label_available_at)
-            if et is not None and ref_avail > et:
+            ref_avail = to_naive_utc(ref.label_available_at)
+            if et is not None and (ref_avail > et or to_naive_utc(fc.target_at)>et):
                 n_label_wait += 1
                 continue
 

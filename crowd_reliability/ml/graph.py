@@ -207,7 +207,8 @@ class GraphHyperNetwork(nn.Module):
         if dyn_valid is None:
             dyn_valid = torch.ones_like(dyn_ctx)
         x = dyn_ctx * dyn_valid
-        scaled = (x - self.input_mean) / self.input_std
+        denom = torch.clamp(self.input_std, min=1e-6)
+        scaled = (x - self.input_mean) / denom
         return torch.where(self.input_continuous, scaled, x) * dyn_valid
 
     def forward(

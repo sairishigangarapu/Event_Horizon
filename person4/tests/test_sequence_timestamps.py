@@ -15,10 +15,11 @@ import pytest
 import numpy as np
 from datetime import datetime, timedelta, timezone
 
-from person4.event_horizon_p4.config import HISTORY_STEPS, U_DIM, NUM_MOCK_ZONES
+from person4.event_horizon_p4.config import HISTORY_STEPS, U_DIM, NUM_MOCK_ZONES, HORIZONS_SEC
 from person4.event_horizon_p4.sequence import (
     SequenceWindowAssembler,
     assemble_u_vec,
+    build_all_windows,
 )
 from person4.event_horizon_p4.synthetic import (
     MOCK_ZONE_IDS,
@@ -204,3 +205,33 @@ class TestRollingWindowPadding:
         batch = asm.step(sc, step_times[0], step=0)
         # After reset, first step should produce padded window
         assert batch.u_history.shape == (NUM_MOCK_ZONES, HISTORY_STEPS, U_DIM)
+
+
+# ---------------------------------------------------------------------------
+# Convenience helper build_all_windows
+# ---------------------------------------------------------------------------
+
+class TestBuildAllWindows:
+    def test_build_all_windows_generates_batch_per_step(self):
+        """build_all_windows returns one WindowBatch per distinct tree_output timestamp."""
+        num_steps = 5
+        sc = generate_scenario("sc_all_win", "test", num_steps=num_steps, seed=10)
+        batches = build_all_windows(sc)
+        assert len(batches) == num_steps
+
+    def test_build_all_windows_tensor_shapes(self):
+        """Every WindowBatch must conform to (NUM_MOCK_ZONES, HISTORY_STEPS, U_DIM)."""
+        sc = generate_scenario("sc_all_shapes", "test", num_steps=4, seed=11)
+        batches = build_all_windows(sc)
+        for batch in batches:
+            assert batch.u_history.shape == (NUM_MOCK_ZONES, HISTORY_STEPS, U_DIM)
+            assert batch.zone_ids == MOCK_ZONE_IDS
+            assert len(batch.target_times) == len(HORIZONS_SEC)
+
+    def test_build_all_windows_monotonic_target_times(self):
+        """Target times across consecutive batches must advance chronologically."""
+        sc = generate_scenario("sc_all_time", "test", num_steps=4, seed=12)
+        batches = build_all_windows(sc)
+        for i in range(1, len(batches)):
+            for h in HORIZONS_SEC:
+                assert batches[i].target_times[h] > batches[i - 1].target_times[h]

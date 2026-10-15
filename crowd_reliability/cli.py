@@ -35,11 +35,17 @@ from crowd_reliability.services.central_source import CentralSourceAdapter, issu
 from crowd_reliability.services.comparator import ForecastComparator
 from crowd_reliability.services.evaluator import EvaluationService
 
-DEFAULT_TREE_ARTIFACT_DIR = "./models/trees"
-DATASET_DIR = "./data/dataset"
+REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+DEFAULT_TREE_ARTIFACT_DIR = os.path.join(REPO_ROOT, "models", "trees")
+DATASET_DIR = os.path.join(REPO_ROOT, "data", "dataset")
 
-def cmd_db_init():
+def cmd_db_init(clear: bool = False):
     """Initializes SQLite database and populates venue layout."""
+    if clear:
+        print("[db-init] Dropping existing database tables...")
+        from crowd_reliability.database import engine
+        from crowd_reliability.models.schema import Base
+        Base.metadata.drop_all(bind=engine)
     print("[db-init] Creating database tables...")
     init_db()
 
@@ -59,6 +65,7 @@ def cmd_db_init():
                     map_version="v1.0"
                 )
                 db.add(rec)
+        db.commit()
 
         # Populate connections
         for c in venue.connections:
@@ -288,11 +295,11 @@ def cmd_seed_serving(seed: int = 42, model_dir: str = None, central_csv_path: st
     print("[seed-serving] Done. Model artifacts unchanged.")
 
 
-def cmd_replay(scenario: str = "crowd_surge", seed: int = 42):
+def cmd_replay(scenario: str = "crowd_surge", seed: int = 42, generate_sim: bool = False):
     """Replays a scenario and runs the architecture prediction pipeline."""
     print(f"[replay] Starting replay for scenario '{scenario}' (seed={seed})...")
     venue = get_default_venue()
-    pipeline = ArchitecturePipeline(venue=venue)
+    pipeline = ArchitecturePipeline(venue=venue, spatial_seed=seed)
     if os.path.exists(os.path.join(settings.model_dir, "manifest.json")):
         pipeline.load_pipeline(settings.model_dir)
 
@@ -302,6 +309,11 @@ def cmd_replay(scenario: str = "crowd_surge", seed: int = 42):
         ref_records = db.query(ReferenceStateRecord).filter(ReferenceStateRecord.scenario_id == scenario).all()
 
         if not obs_records:
+            if not generate_sim:
+                raise RuntimeError(
+                    f"No observations found for scenario '{scenario}'. "
+                    "Use --generate-sim to create synthetic data."
+                )
             print(f"[replay] No observations found for '{scenario}'. Running simulation on the fly...")
             cfg = SCENARIO_PRESETS.get(scenario, SCENARIO_PRESETS["crowd_surge"])
             cfg.seed = seed
@@ -470,7 +482,7 @@ def cmd_export_spatial_sample(scenario: str = "bottleneck_exit_closure", seed: i
     received by as_of only; the simulator's reference states are used solely to generate
     those observations and are never passed to inference.
     """
-    import json as _json
+    # json is imported at the top of this module
     import torch
     from crowd_reliability.ml.spatial import spatial_contract
     from crowd_reliability.ml.tree_bank import TREE_CHANNELS as _CHANNELS
@@ -525,7 +537,7 @@ def cmd_export_spatial_sample(scenario: str = "bottleneck_exit_closure", seed: i
     }
     os.makedirs(os.path.dirname(out) or ".", exist_ok=True)
     with open(out, "w", encoding="utf-8", newline="\n") as f:
-        _json.dump(sample, f, indent=2)
+        json.dump(sample, f, indent=2)
     print(f"[export-spatial-sample] Wrote {out}: H{list(spatial_out.H.shape)} Vn{list(spatial_out.Vn.shape)} "
           f"Ve{list(spatial_out.Ve.shape)} at {as_of.isoformat()} ({len(used)} observations used)")
     return sample
@@ -543,7 +555,7 @@ def _print_channel_metrics(metrics: Dict[str, Dict[str, Any]]):
 
 
 def _load_jsonl(path: str) -> List[Dict[str, Any]]:
-    import json
+    # json is imported at the top of this module
     rows = []
     with open(path) as f:
         for line in f:
@@ -607,7 +619,7 @@ def cmd_train_trees(train: str = None, test: str = None, seed: int = 42,
         metrics = benchmark_channels(rows, test_refs)
         print(f"\n=== Held-out benchmark ({test_ids[0]}) ===")
         _print_channel_metrics(metrics)
-        import json
+        # json is imported at the top of this module
         with open(os.path.join(out_dir, "holdout_benchmark.json"), "w", encoding="utf-8") as f:
             json.dump(metrics, f, indent=2)
 
@@ -675,7 +687,7 @@ def cmd_monte_carlo_refit(runs: int = 5, seed: int = 42,
     metrics = benchmark_channels(preds, refs)
     print("\n=== Monte Carlo OOS benchmark (held-out scenario) ===")
     _print_channel_metrics(metrics)
-    import json
+    # json is imported at the top of this module
     with open(os.path.join(out_dir, "mc_benchmarks.json"), "w", encoding="utf-8") as f:
         json.dump(metrics, f, indent=2)
 
@@ -694,6 +706,9 @@ def cmd_benchmark_trees(preds: str = os.path.join(DEFAULT_TREE_ARTIFACT_DIR, "mc
 def cmd_dataset_ingest(dataset_dir: str = DATASET_DIR, grid_cols: int = 8, grid_rows: int = 4,
                        exit_boundary: str = "bottom", force: bool = False):
     """Ingests the Event_Horizon dataset into the DB as zones + observations + reference states."""
+    dataset_dir = os.path.abspath(dataset_dir)
+    if not os.path.isdir(dataset_dir):
+        raise ValueError(f"Dataset directory does not exist or is not a directory: {dataset_dir}")
     print(f"[dataset-ingest] Ingesting {dataset_dir} (grid {grid_cols}x{grid_rows}, exits={exit_boundary})")
     cmd_db_init()
     db = SessionLocal()
@@ -781,7 +796,8 @@ def main():
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     # db-init
-    subparsers.add_parser("db-init", help="Initialize local SQLite schema and venue map")
+    p_init = subparsers.add_parser("db-init", help="Initialize local SQLite schema and venue map")
+    p_init.add_argument("--clear", action="store_true", help="Clear/drop existing database tables before recreating")
 
     # seed-demo
     p_seed = subparsers.add_parser("seed-demo", help="Generate synthetic scenario fixtures and seed database")
@@ -798,6 +814,7 @@ def main():
     p_rep = subparsers.add_parser("replay", help="Replay scenario and run inference")
     p_rep.add_argument("--scenario", type=str, default="crowd_surge", help="Scenario identifier")
     p_rep.add_argument("--seed", type=int, default=42, help="Simulation seed")
+    p_rep.add_argument("--generate-sim", action="store_true", help="Generate simulation data if DB is empty")
 
     # evaluate
     p_eval = subparsers.add_parser("evaluate", help="Score forecasts against reference states")
@@ -864,13 +881,13 @@ def main():
     args = parser.parse_args()
 
     if args.command == "db-init":
-        cmd_db_init()
+        cmd_db_init(clear=args.clear)
     elif args.command == "seed-demo":
         cmd_seed_demo(seed=args.seed)
     elif args.command == "seed-serving":
         cmd_seed_serving(seed=args.seed, model_dir=args.model_dir)
     elif args.command == "replay":
-        cmd_replay(scenario=args.scenario, seed=args.seed)
+        cmd_replay(scenario=args.scenario, seed=args.seed, generate_sim=args.generate_sim)
     elif args.command == "evaluate":
         cmd_evaluate(split=args.split)
     elif args.command == "spatial-init":

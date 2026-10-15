@@ -19,6 +19,8 @@ from crowd_reliability.ml.temporal import MultivariateTemporalForecaster, TARGET
 from crowd_reliability.simulation.scenarios import VenueLayout, get_default_venue
 
 def _calc_sha256(filepath: str) -> str:
+    if not os.path.exists(filepath):
+        raise ModelArtifactError(f"Missing file for checksum: {filepath}")
     h = hashlib.sha256()
     with open(filepath, "rb") as f:
         while chunk := f.read(65536):
@@ -182,6 +184,7 @@ class ArchitecturePipeline:
         if obs_masks[1] == 0: raw_values[1] = 1.2  # speed
         if obs_masks[2] == 0: raw_values[2] = 1.0  # inflow
         if obs_masks[3] == 0: raw_values[3] = 1.0  # outflow
+        # F-029: queue_length fallback is 0.0; consumers must check obs_masks[4]==0 to distinguish from measured 0.0
         if obs_masks[4] == 0: raw_values[4] = 0.0  # queue_length
         if obs_masks[5] == 0: raw_values[5] = 1.0  # exit_open
 
@@ -245,6 +248,9 @@ class ArchitecturePipeline:
         3. Assembles U[z,t] and appends to rolling history.
         4. Runs MultivariateTemporalForecaster -> multi-horizon forecasts.
         """
+        self.temporal_model.eval()
+        self.hypernet.eval()
+        self.gnn.eval()
         recent_observations = [o for o in recent_observations if getattr(o,'scenario_id',scenario_id) == scenario_id]
         as_of_time = utc(as_of_time)
         # Normalize ORM-loaded naive and UTC-aware report times at the boundary.
@@ -341,9 +347,18 @@ class ArchitecturePipeline:
                         continue
 
                     val = float(forecasts_tensor[i, h_idx, var_idx])
+                    fid_raw = f"{scenario_id}:{z_id}:{var_name}:{as_of_time.isoformat()}:{h_sec}:{self.manifest.pipeline_version}:{sorted(self.manifest.model_hashes.items())}"
+                    fid_hash = hashlib.sha256(fid_raw.encode("utf-8")).hexdigest()[:32]
+
+                    # Channel mask and missing data mask from tree_masks and detailed fresh masks
+                    c_mask = zone_inputs["tree_masks"][i] if i < len(zone_inputs["tree_masks"]) else [1] * 6
+                    if isinstance(c_mask, np.ndarray):
+                        c_mask = c_mask.tolist()
+                    fresh_arr = zone_inputs["detailed"][i]["fresh"] if i < len(zone_inputs["detailed"]) else np.ones(6)
+                    m_mask = [int(1 - f) for f in fresh_arr]
 
                     f_rec = ForecastRecord(
-                        forecast_id=f"f_arch_{uuid.uuid4().hex[:8]}",
+                        forecast_id=f"f_arch_{fid_hash}",
                         stream_id="stream_b_architecture",
                         scenario_id=scenario_id,
                         zone_id=z_id,
@@ -353,7 +368,10 @@ class ArchitecturePipeline:
                         received_at=as_of_time,
                         target_at=target_at,
                         value=round(val, 4),
-                        model_or_provider_version=self.manifest.pipeline_version
+                        model_or_provider_version=self.manifest.pipeline_version,
+                        channel_mask=c_mask,
+                        applicability=1.0,
+                        missing_data_mask=m_mask,
                     )
                     forecast_records.append(f_rec)
 
@@ -415,11 +433,16 @@ class ArchitecturePipeline:
         if self.manifest.spatial_artifact_dir:
             # Verify both files of the pair before loading either
             spatial_dir = os.path.join(model_dir, self.manifest.spatial_artifact_dir)
+            if not os.path.isdir(spatial_dir):
+                raise ModelArtifactError(f"Missing model artifact: {spatial_dir}")
             for filename in ("hypernet.pt", "gnn.pt"):
                 rel = f"{self.manifest.spatial_artifact_dir}/{filename}"
                 _verify_recorded_hash(self.manifest, rel, os.path.join(spatial_dir, filename))
             self.spatial.load(spatial_dir)
-            self.hypernet=self.spatial.hypernet;self.gnn=self.spatial.gnn
+            self.hypernet = self.spatial.hypernet
+            self.gnn = self.spatial.gnn
+            self.hypernet.eval()
+            self.gnn.eval()
         elif any(os.path.exists(os.path.join(model_dir, f)) for f in ("hypernet.pt", "gnn.pt")):
             raise ValueError(
                 "Legacy spatial checkpoint (hypernet.pt/gnn.pt at the model root, no spatial_artifact_dir) "
@@ -432,3 +455,4 @@ class ArchitecturePipeline:
         tm_path = os.path.join(model_dir, "temporal_model.pt")
         _verify_recorded_hash(self.manifest, "temporal_model.pt", tm_path)
         self.temporal_model = MultivariateTemporalForecaster.load(tm_path)
+        self.temporal_model.eval()

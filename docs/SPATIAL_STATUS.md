@@ -1,3 +1,5 @@
+> Historical handoff notes. Current integrated behavior and validation status are recorded in [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md) and [INTEGRATION_AUDIT_RECONCILIATION.md](INTEGRATION_AUDIT_RECONCILIATION.md). Statements below about active versions, untrained stages or incomplete wiring may describe the earlier snapshot.
+
 # Spatial ML status: graph builder, hypernetwork, GNN (Person 3)
 
 **Date:** 14 October 2026 · **Owner:** Person 3 (Spatial ML) · **Branch:** `main`, changes uncommitted at time of writing

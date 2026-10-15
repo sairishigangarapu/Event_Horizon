@@ -35,7 +35,7 @@ class ComparisonResult:
 
 class ForecastComparator:
     """
-    Aligns Stream A (Central) and Stream B (Architecture) by (zone_id, variable, target_at).
+    Aligns Stream A (Central) and Stream B (Architecture) by (scenario_id, zone_id, variable, unit, issued_at, target_at).
     Computes per-variable differences and evaluates evidence freshness and report conflicts.
     """
     def align_and_compare(
@@ -93,7 +93,9 @@ class ForecastComparator:
         evaluated_at: datetime,
         zone_id: str,
         variable: str,
-        target_ref_id: str = "obs_eval"
+        target_ref_id: str = "obs_eval",
+        zone_type: Optional[str] = None,
+        scenario_type: Optional[str] = None,
     ) -> AssessmentRecord:
         """
         Assesses evidence freshness, coverage, and report conflicts for a specific zone and variable.
@@ -125,50 +127,20 @@ class ForecastComparator:
                 per_variable_flags=missing_flags
             )
 
-        # Collapse forwarded copies: duplicates never count as independent confirmations.
-        independent, _, _ = deduplicate_reports(zone_var_obs)
-
-        # Most recent independent observation
-        age_sec = min(observation_age_seconds(o, evaluated_at) for o in independent)
-
-        # Check for conflicts among independent recent reports (within last 30s)
-        recent_window = [o for o in independent if observation_age_seconds(o, evaluated_at) <= 30.0]
-        is_conflict, conflict_ids = detect_conflicts(recent_window)
-
-        # Rapid change: relative std over the rapid-change window
-        rapid_window = [o for o in independent if observation_age_seconds(o, evaluated_at) <= RAPID_CHANGE_WINDOW_S]
-        is_rapid = False
-        if len(rapid_window) >= RAPID_CHANGE_MIN_REPORTS:
-            values = [o.value for o in rapid_window]
-            mean_val = sum(values) / len(values)
-            if abs(mean_val) > 1e-6:
-                rel_std = (sum((v - mean_val) ** 2 for v in values) / len(values)) ** 0.5 / abs(mean_val)
-                is_rapid = rel_std > RAPID_CHANGE_REL_STD
-
-        # Variable/scenario-aware freshness thresholds (P2): event-driven states go
-        # stale faster than bulk density. Density keeps its 45s boundary.
-        thresholds_obj = DEFAULT_FRESHNESS_THRESHOLDS
-        recent_th, outdated_th = thresholds_obj.for_variable(variable)
-        is_stale = age_sec > outdated_th
-        coverage = 1.0 if not is_stale else max(0.1, 1.0 - (age_sec - outdated_th) / 100.0)
-
-        return AssessmentRecord(
-            target_ref_id=target_ref_id,
-            target_type="observation",
-            evaluated_at=evaluated_at,
-            observation_age_seconds=round(age_sec, 2),
-            conflict_ids=conflict_ids,
-            coverage=round(coverage, 3),
-            per_variable_flags={
-                # Legacy flags (kept for API/dashboard compatibility)
-                "stale": age_sec > outdated_th,
-                "conflict": is_conflict,
-                "missing": False,
-                # Five independent freshness labels
-                "recently_verified": age_sec <= recent_th,
-                "potentially_outdated": age_sec > outdated_th,
-                "conflicting_evidence": is_conflict,
-                "rapidly_changing": is_rapid,
-                "insufficient_current_evidence": age_sec > INSUFFICIENT_EVIDENCE_WINDOW_S,
-            }
-        )
+        from crowd_reliability.reliability import assess_information as canonical_assessment
+        # The known roster is inferred from sources received so far, not from future
+        # reports. Coverage is the fresh fraction of that roster, never an age proxy.
+        roster=sorted({o.source_id for o in zone_var_obs if o.source_id})
+        result=canonical_assessment(zone_var_obs,evaluated_at,
+            expected_coverage={(zone_id,variable):roster},scenario_type=scenario_type,
+            zone_type_lookup={zone_id:zone_type} if zone_type else None)
+        row=next(r for r in result['per_zone'] if r['zone_id']==zone_id and r['variable']==variable)
+        labels=row['labels']
+        record=AssessmentRecord(target_ref_id=target_ref_id,target_type='observation',
+            evaluated_at=evaluated_at,observation_age_seconds=row['age_seconds'],
+            conflict_ids=row['conflict_ids'],coverage=row['coverage_ratio'] or 0.0,
+            per_variable_flags=dict(labels,stale=labels['potentially_outdated'],
+                conflict=labels['conflicting_evidence'],missing=False))
+        record.coverage_basis='fresh sources / historically received source roster'
+        record.conflict_graph=result['conflict_graph']
+        return record

@@ -1,3 +1,5 @@
+> Historical handoff notes. Current integrated behavior and validation status are recorded in [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md) and [INTEGRATION_AUDIT_RECONCILIATION.md](INTEGRATION_AUDIT_RECONCILIATION.md). Statements below about active versions, untrained stages or incomplete wiring may describe the earlier snapshot.
+
 # Tree Models & Reliability — Inference Path Confirmation
 ## Member 2 — Decision-tree bank, integration contract, and evidence reliability
 

@@ -1,11 +1,11 @@
 # Railway deployment
 
-The root Dockerfile now serves the integrated Studio at `/` and the separate runtime dashboard at `/dashboard/`. One public ASGI process binds to Railway's `PORT` on `0.0.0.0`. Studio's internal HTTP server uses a private ephemeral loopback port. `/api/ready` verifies model artifacts loaded and Studio is running. Browser links and requests stay on the deployment origin; no visitor-local backend URL is exposed.
+The root Dockerfile now serves the integrated Studio at `/` and the combined crowd/forecast dashboard at `/dashboard/`. One public ASGI process binds to Railway's `PORT` on `0.0.0.0`. Studio's internal HTTP server uses a private ephemeral loopback port. `/api/ready` verifies model artifacts loaded and Studio is running. Browser links and requests stay on the deployment origin; no visitor-local backend URL is exposed.
 
 ## Deploy from GitHub
 
 1. Connect Railway and give its GitHub integration access to Manipal-Hackathon-2026/MKCrusaders26.
-2. Create a service from that repository, branch main, root directory `/`.
+2. Create a service from that repository, branch bugbounty, root directory `/`.
 3. Railway reads railway.json and the root Dockerfile. No custom build/start command is needed.
 4. Generate a public domain after the service is running.
 5. Open `/`, load the example scene, render, play, and open `/dashboard/`.
@@ -27,15 +27,9 @@ If a project already exists, use `railway link` instead of creating another proj
 
 ## GitHub Actions
 
-`.github/workflows/railway.yml` runs the backend, Person 4, Studio, frontend, two-service and single-port tests, then builds the container. Railway deployment runs only after that job succeeds AND these repository variables are configured:
+`.github/workflows/railway.yml` is now **integration checks only**: full backend, Person 4, Studio, authenticated frontend/real-model transport and the container build. It never deploys main or reads Railway credentials.
 
-- RAILWAY_PROJECT_ID
-- RAILWAY_SERVICE_ID
-- RAILWAY_ENVIRONMENT (optional; defaults to production)
-
-Add an environment-scoped project token as the GitHub secret RAILWAY_TOKEN. Never commit a token. Alternatively use Railway's GitHub autodeploy; choose one deployment trigger to avoid duplicate deployments. If CI is the gate, disable independent Railway push autodeploy or configure its checks gate.
-
-The legacy Hugging Face workflow is manual-only and uses the preserved Dockerfile under deploy/hf_space. It no longer deploys automatically on each main push.
+Railway's configured live source is `bugbounty`. Main contains integration work; do not promote it to bugbounty until the frontend has been approved. The legacy Hugging Face workflow remains manual-only.
 
 ## Runtime storage and capacity
 
@@ -44,6 +38,7 @@ Keep one replica and one Uvicorn worker because live session state is in memory.
 ## Verify
 
     python verify_hosted.py
+    python verify_random_flow.py
 
 This starts the actual hosted ASGI entrypoint on a temporary port and verifies page/asset routing, same-origin backend configuration, render, released observations, trained runtime inference, matured labels, hidden future actuals and a Unicode master report.
 

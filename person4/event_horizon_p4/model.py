@@ -1,10 +1,12 @@
 """
 model.py – GRU temporal forecaster with six output heads per zone/horizon.
 
-DISCLAIMER: Synthetic scaffold only. NOT for real-world use.
+NOTE: This module provides temporal forecasting models; architectural
+dimensions (U_DIM=40, H_DIM=16, HISTORY_STEPS=12) are actively reconciled
+with the production ArchitecturePipeline.
 
 Architecture:
-  Input  : U[z,t] ∈ ℝ^(U_DIM=39), history length = HISTORY_STEPS = 60.
+  Input  : U[z,t] ∈ ℝ^(U_DIM=40), history length = HISTORY_STEPS = 12 (60 s look-back).
   GRU    : 2-layer bidirectional-disabled GRU, hidden_dim=64.
   Output : [Z, horizons, 6] where
              channels 0-4 → numeric heads (density, speed, inflow, outflow, queue)

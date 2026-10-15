@@ -48,7 +48,9 @@ def validate(c):
         if not integer(r.get('count')) or not 0<=r['count']<=1500: raise ValueError('Route population: 0–1500.')
         if not number(r.get('speed')) or not .2<=r['speed']<=3: raise ValueError('Speed: 0.2–3 m/s.')
         if not number(r.get('width')) or not .5<=r['width']<=20: raise ValueError('Width: 0.5–20 m.')
-        total+=r['count']
+        if not integer(r.get('lanes',1)) or not 1<=r.get('lanes',1)<=20:raise ValueError('Lane count: 1–20.')
+        if not number(r.get('arrival_rate',0)) or not 0<=r.get('arrival_rate',0)<=10:raise ValueError('Arrival rate: 0–10 people/s.')
+        total+=r['count']+int(r.get('arrival_rate',0)*c['duration'])
     eids=set()
     for e in events:
         if not isinstance(e,dict) or not isinstance(e.get('id'),str) or not e['id'] or e['id'] in eids: raise ValueError('Incident IDs must be unique.')
@@ -119,7 +121,7 @@ def grid(agents,scale):
         cells[key]['count']+=1
     return cells
 
-def simulate(c,mode):
+def live_steps(c,mode):
     validate(c)
     if mode not in ['ideal','custom','random']:raise ValueError('Unknown run mode.')
     random=RNG(c['seed']);routes=c['routes'];paths=[path(x,c['scale']) for x in routes]
@@ -127,14 +129,27 @@ def simulate(c,mode):
     closures=barriers(c,events,paths);agents=[];frames=[];waiting_frames=[];rows=[];schedules=[];uid=0
     for ri,r in enumerate(routes):
         for i in range(int(r['count'])):
-            uid+=1;schedules.append({'time':math.floor(i/max(1,r['count'])*c['duration']*.65),'ri':ri,'at':0,'speed':r['speed']*(.85+random.next()*.3),'id':uid})
+            uid+=1;schedules.append({'time':0 if r.get('initial_fill') else math.floor(i/max(1,r['count'])*c['duration']*.65),'ri':ri,'at':((i//r.get('lanes',1)+.5)/max(1,math.ceil(r['count']/r.get('lanes',1)))*paths[ri]['length']*.85) if r.get('initial_fill') else 0,'speed':r['speed']*(.85+random.next()*.3),'id':uid,'lane':i%r.get('lanes',1)})
+        for i in range(int(r.get('arrival_rate',0)*c['duration'])):
+            uid+=1;schedules.append({'time':1+math.floor(i/max(.001,r['arrival_rate'])),'ri':ri,'at':0,'speed':r['speed']*(.85+random.next()*.3),'id':uid,'lane':i%r.get('lanes',1),'arrival':True})
     for e in events:
         if e['type']!='surge':continue
         ri=next(i for i,r in enumerate(routes) if r['id']==e['routeId'])
         for i in range(int(e['people'])):
             uid+=1;schedules.append({'time':e['start']+math.floor(i/e['people']*(e['end']-e['start'])),'ri':ri,'at':e['at']*paths[ri]['length'],'speed':routes[ri]['speed']*(.85+random.next()*.3),'id':uid})
     schedules.sort(key=lambda s:(s['time'],s['id']));cursor=0;pending=[];outgoing=[0]*len(routes);blocked=[0]*len(routes);completed=[0]*len(routes);prevented=0;violations=[]
+    scheduled_events={e['id'] for e in events}
     for t in range(int(c['duration'])+1):
+        # Live operator actions are appended with future start times only.
+        for e in events:
+            if e['id'] in scheduled_events:continue
+            scheduled_events.add(e['id'])
+            if e['type']!='surge':continue
+            ri=next(i for i,r in enumerate(routes) if r['id']==e['routeId'])
+            for i in range(int(e['people'])):
+                uid+=1;schedules.append({'time':e['start']+math.floor(i/e['people']*(e['end']-e['start'])),'ri':ri,'at':e['at']*paths[ri]['length'],'speed':routes[ri]['speed']*(.85+random.next()*.3),'id':uid})
+        schedules.sort(key=lambda s:(s['time'],s['id']))
+        closures=barriers(c,events,paths)
         active_blocks=[[] for _ in routes]
         for b in closures:
             if not b['start']<=t<b['end']:continue
@@ -145,10 +160,17 @@ def simulate(c,mode):
             s=schedules[cursor];cursor+=1;pending.append(s);scheduled[s['ri']]+=1
         keep=[]
         for s in pending:
+            if s.get('arrival') and t>=c.get('meter_from',float('inf')):keep.append(s);continue
             if any(b['lo']-EPS<=s['at']<=b['hi']+EPS for b in active_blocks[s['ri']]):keep.append(s);continue
             agents.append({**s,'s':s['at'],'v':0,'done':False,'admittedAt':t});incoming[s['ri']]+=1
         pending=keep;active=[a for a in agents if not a['done']]
-        for a in active:a['pos']=position(routes[a['ri']],paths[a['ri']],a['s'])
+        for a in active:
+            route=routes[a['ri']];p=paths[a['ri']];a['pos']=position(route,p,a['s'])
+            lanes=route.get('lanes',1)
+            if lanes>1:
+                ahead=position(route,p,min(p['length'],a['s']+.05));dx=ahead['x']-a['pos']['x'];dy=ahead['y']-a['pos']['y'];norm=math.hypot(dx,dy) or 1
+                offset=((a.get('lane',a['id']%lanes)+.5)/lanes-.5)*route['width']/c['scale']*.8
+                a['pos']={'x':min(999,max(1,a['pos']['x']-dy/norm*offset)),'y':min(699,max(1,a['pos']['y']+dx/norm*offset))}
         cells=grid(active,c['scale'])
         for ri,route in enumerate(routes):
             p=paths[ri];remaining=[a for a in active if a['ri']==ri]
@@ -160,12 +182,14 @@ def simulate(c,mode):
             if key in wg:wg[key]['count']+=1
             else:wg[key]={'ri':a['ri'],'at':a['at'],'count':1}
         waiting_frames.append(list(wg.values()))
+        yield {'mode':mode,'events':events,'barriers':closures,'frames':frames,'waitingFrames':waiting_frames,'rows':rows,'total':uid,'completed':sum(completed),'waiting':len(pending),'active':len(active),'peakQueue':max(r['queued'] for r in rows),'audit':{'preventedMoves':prevented,'violations':violations},'modelVersion':'kinematic-v3'}
         if t==c['duration']:break
         outgoing=[0]*len(routes);blocked=[0]*len(routes)
         for ri,route in enumerate(routes):
-            group=sorted((a for a in active if a['ri']==ri),key=lambda a:(-a['s'],a['id']));lead=float('inf')
+            group=sorted((a for a in active if a['ri']==ri),key=lambda a:(-a['s'],a['id']));leads={}
             for a in group:
                 cell=cells[a['cell']];v=a['speed']/(1+max(0,cell['count']/cell['area']-.5)*1.8);before=a['s'];limited=False
+                lane=a.get('lane',a['id']%route.get('lanes',1));lead=leads.get(lane,float('inf'))
                 v=min(v,max(0,lead-a['s']-.65))
                 for b in active_blocks[ri]:
                     if b['lo']-EPS<=a['s']<=b['hi']+EPS:
@@ -173,12 +197,17 @@ def simulate(c,mode):
                         v=0
                     elif a['s']<b['lo']-EPS and a['s']+v>=b['lo']-EPS:v=max(0,b['lo']-EPS-a['s']);limited=True
                 if limited:blocked[ri]+=1;prevented+=1
-                a['v']=v;a['s']+=v;lead=a['s']
+                a['v']=v;a['s']+=v;leads[lane]=a['s']
                 for b in active_blocks[ri]:
                     if (before<b['lo']-EPS and a['s']>b['lo']+EPS) or (b['lo']-EPS<=before<=b['hi']+EPS and a['s']>before+EPS):violations.append({'time_s':t,'agent_id':a['id'],'route_id':route['id'],'event_id':b['eventId'],'from_m':before,'to_m':a['s']})
                 if a['s']>=paths[ri]['length']-EPS:a['done']=True;outgoing[ri]+=1;completed[ri]+=1
     final=rows[-len(routes):]
     return {'mode':mode,'events':events,'barriers':closures,'frames':frames,'waitingFrames':waiting_frames,'rows':rows,'total':uid,'completed':sum(completed),'waiting':len(pending),'active':sum(r['active'] for r in final),'peakQueue':max(r['queued'] for r in rows),'audit':{'preventedMoves':prevented,'violations':violations},'modelVersion':'kinematic-v3'}
+
+def simulate(c,mode):
+    result=None
+    for result in live_steps(c,mode):pass
+    return result
 
 def normalize_routes(payload,scale=.1):
     if not isinstance(payload,dict) or not isinstance(payload.get('routes'),list): raise ValueError('Route JSON must contain a routes array.')

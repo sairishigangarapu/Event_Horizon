@@ -2,7 +2,7 @@
 test_tensor_shapes.py – Validates output tensor shapes for model, sequence, and inference.
 
 Checks:
-  - U_DIM = 39 for assembled U vectors.
+  - U_DIM = 40 for assembled U vectors.
   - WindowBatch u_history shape: (num_zones, HISTORY_STEPS, U_DIM).
   - Model raw output shape: (num_zones, num_horizons, 6).
   - ForecastRecord list length matches (zones × horizons × applicable variables).

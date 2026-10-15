@@ -1,4 +1,4 @@
-"""Offline Monte Carlo selection of clustered trees + hypernetwork/GNN/GRU.
+"""Offline Monte Carlo tree selection and fixed-configuration neural bootstrapping.
 
 Train/validation/test scenario seeds never overlap. No models are trained online.
 Artifacts remain labelled synthetic_validated, never real-world validated.
@@ -22,7 +22,8 @@ from crowd_reliability.simulation.scenarios import ScenarioConfig,get_default_ve
 from crowd_reliability.contracts import utc
 
 SCALE=np.array([1.,1.,2.,2.,10.,1.],dtype=np.float32)
-CANDIDATES=[dict(hidden=32,lr=.003,depth=4,clusters=2),dict(hidden=64,lr=.001,depth=8,clusters=3)]
+TREE_CANDIDATES=[dict(depth=4,clusters=2),dict(depth=8,clusters=3)]
+NEURAL_CONFIG=dict(hidden=32,lr=.003)  # Fixed; not selected by Monte Carlo trials.
 
 def monte_carlo_scenarios(seed,counts,duration=240):
     venue=get_default_venue();splits={}
@@ -140,35 +141,61 @@ def fit_neural(graph,data,candidate,seed,epochs):
 def run(out,seed=42,runs=6,epochs=20):
     torch.set_num_threads(1)
     out=Path(out);out.mkdir(parents=True,exist_ok=True)
-    if (out/'manifest.json').exists():raise ValueError('Use a new output directory; existing model versions are preserved.')
+    if (out/'manifest.json').exists():raise ValueError('Refuse to overwrite an existing candidate.')
     venue,splits=monte_carlo_scenarios(seed,(runs,max(2,runs//3),max(2,runs//3)))
     graph=SpatialGraphBuilder(venue.zones,venue.connections);selected=None;trials=[]
-    for ci,candidate in enumerate(CANDIDATES):
-        print('Candidate',ci+1,candidate,flush=True)
+    # Monte Carlo model selection is confined to the decision-tree bank.
+    for candidate in TREE_CANDIDATES:
         bank=fit_bank(splits['train'],graph,candidate,seed)
-        # Test observations/labels are not touched during selection.
-        inputs={name:model_inputs(splits[name],bank,graph) for name in ('train','validation')}
-        data={name:windows(items) for name,items in inputs.items()}
-        enc,temporal,value,curve=fit_neural(graph,data,candidate,seed,epochs)
-        trial=dict(config=candidate,validation_loss=value,curve=curve);trials.append(trial)
-        if selected is None or value<selected[0]:selected=(value,bank,enc,temporal,copy.deepcopy(candidate))
-    _,bank,enc,temporal,config=selected
+        errors=[]
+        for scenario in splits['validation']:
+            for base,y in zip(scenario['base'],scenario['labels']):
+                pred=np.asarray(bank.predict_context(base,graph)[0]);mask=y>=0
+                errors.extend((((pred-y)/SCALE)**2)[mask].tolist())
+        value=float(np.mean(errors));trials.append(dict(config=candidate,validation_tree_loss=value))
+        if selected is None or value<selected[0]:selected=(value,bank,copy.deepcopy(candidate))
+    _,bank,tree_config=selected
+    # Whole-scenario cross-fitting: no training sample uses a tree fitted on its run.
+    training=[];folds=[];items=splits['train'];nfold=min(3,len(items))
+    for fold in range(nfold):
+        held=[x for i,x in enumerate(items) if i%nfold==fold]
+        fitted=[x for i,x in enumerate(items) if i%nfold!=fold]
+        fold_bank=fit_bank(fitted,graph,tree_config,seed+fold)
+        training.extend(model_inputs(held,fold_bank,graph))
+        folds.append(dict(fit_ids=[x['id'] for x in fitted],heldout_ids=[x['id'] for x in held]))
+    data={'train':windows(training),'validation':windows(model_inputs(splits['validation'],bank,graph))}
+    enc,temporal,value,curve=fit_neural(graph,data,NEURAL_CONFIG,seed,epochs)
+    enc.hypernet.eval();enc.gnn.eval();temporal.eval()
+    with torch.no_grad():validation_pred=forward(enc,temporal,data['validation'])
+    validation_metrics=metrics(validation_pred,data['validation'])
+    validation_baseline=metrics(data['validation']['baseline'],data['validation'])
+    wins=sum(validation_metrics[f'{v}/30s']['mae']<validation_baseline[f'{v}/30s']['mae'] for v in TARGET_VAR_NAMES[:5])
+    gate=wins>=3 and validation_metrics['queue_length/30s']['mae']<=1.1*validation_baseline['queue_length/30s']['mae']
+    status='synthetic_validated' if gate else 'trained_not_validated'
+    # Final test is reporting only; it never selects parameters or determines the gate.
     test=windows(model_inputs(splits['test'],bank,graph))
     with torch.no_grad():pred=forward(enc,temporal,test)
-    summary={'scope':'synthetic_only','selection_objective':'masked scale-normalized regression MSE + 0.2 exit BCE',
-        'seed':seed,'selected':config,'trials':trials,'heldout_metrics':metrics(pred,test),
-        'persistence_metrics':metrics(test['baseline'],test),'split_ids':{k:[s['id'] for s in v] for k,v in splits.items()},
-        'split_seeds':{k:[s['seed'] for s in v] for k,v in splits.items()},
+    config=dict(**NEURAL_CONFIG,**tree_config)
+    summary={'scope':'synthetic_only','selection_objective':'tree current-state scale-normalized MSE on validation scenarios',
+        'neural_configuration_policy':'fixed before fitting; no Monte Carlo neural hyperparameter selection',
+        'seed':seed,'selected':config,'trials':trials,'neural_validation_loss':value,'neural_curve':curve,
+        'neural_validation_gate':{'passed':gate,'wins_at_30s':wins,'queue_regression_limit':1.1},
+        'validation_metrics':validation_metrics,'validation_persistence_metrics':validation_baseline,
+        'heldout_metrics':metrics(pred,test),'persistence_metrics':metrics(test['baseline'],test),
+        'oos_folds':folds,'split_ids':{k:[x['id'] for x in v] for k,v in splits.items()},
+        'split_seeds':{k:[x['seed'] for x in v] for k,v in splits.items()},
         'training_runs':runs,'epochs_max':epochs,'calibrated_real_world':False,
         'python':platform.python_version(),'torch':torch.__version__,'numpy':np.__version__}
-    enc.stamp(training_status='synthetic_validated')
+    enc.stamp(training_status=status)
     pipeline=ArchitecturePipeline(venue=venue);pipeline.tree_bank=bank;pipeline.spatial=enc;pipeline.gnn=enc.gnn;pipeline.hypernet=enc.hypernet;pipeline.temporal_model=temporal
-    pipeline.manifest.training_status={k:'synthetic_validated' for k in ('hypernet','gnn','temporal','tree_bank')}
-    pipeline.manifest.metrics_summary=summary;pipeline.manifest.pipeline_version='v2.0.0-synthetic'
+    pipeline.manifest.training_status={k:status for k in ('hypernet','gnn','temporal')}
+    pipeline.manifest.training_status['tree_bank']='trained_offline'
+    pipeline.manifest.metrics_summary=summary;pipeline.manifest.pipeline_version='v2.1.0-fixed-neural-synthetic'
+    pipeline.manifest.is_active=False
     pipeline.save_pipeline(str(out))
     (out/'selection_report.json').write_text(json.dumps(summary,indent=2,allow_nan=False),encoding='utf-8')
     (out/'training_venue.json').write_text(json.dumps(venue.model_dump(),indent=2),encoding='utf-8')
-    print('Saved',out,'(synthetic evaluation only)',flush=True)
+    print('Saved',out,'('+status+'; synthetic evaluation only)',flush=True)
     return summary
 
 def main():

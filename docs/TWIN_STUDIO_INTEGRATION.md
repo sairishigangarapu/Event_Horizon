@@ -1,8 +1,8 @@
 # Twin Studio integration
 
-**Status:** Phases 1–3 are implemented and tested. Phases 4–8 have not started: there are no services, APIs, object storage or main-pipeline integration yet.
+**Status:** This is a chronological Phase 1–7 implementation log; early sections describe superseded stages. Observation/reference APIs and optional S3/Compose infrastructure exist, and v3 adds a separately trained but not validated neural pipeline. Current status: [TWIN_V3_RECONCILIATION.md](TWIN_V3_RECONCILIATION.md) and [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md). The live random-flow dashboard uses the route-context path, not a silent replacement of these fixed-zone models.
 
-The Twin Studio simulator becomes the canonical simulated-world and reference-state source for the environment `eh_twin_studio`. It lives in the isolated subsystem `services/twin_studio/`. The main application may use only its public modules, and no main-pipeline code imports the subsystem yet.
+The Twin Studio simulator becomes the canonical simulated-world and reference-state source for the environment `eh_twin_studio`. It lives in the isolated subsystem `services/twin_studio/`. The main application may use only its public modules, and the main API reads only persisted public v3 evaluation outputs. Earlier phase descriptions below retain their original scope.
 
 ## Source and engine provenance (`services/twin_studio/engine/SOURCE.json`)
 

@@ -1,7 +1,8 @@
 """
 inference.py – Checkpoint loading and variable-resolved ForecastRecord production.
 
-DISCLAIMER: Synthetic scaffold only. NOT for real-world use.
+NOTE: Checkpoint loading and forecast generation. Variable schemas and
+exit masks are aligned with the production schema and pipeline contract.
 
 Public interface:
     forecaster = TemporalForecaster.from_checkpoint(path)

@@ -98,7 +98,7 @@ def venue_from_routes(data):
         if length < 1:
             raise HTTPException(422, 'Routes must be at least one metre long.')
         zones.append(dict(zone_id=r.id, name=r.name, zone_type='exit', has_exit=True,
-                          area_m2=length*r.width, capacity_definition=length*r.width*2,
+                          area_m2=length*r.width, capacity_definition=None,capacity_status='unknown',
                           x=sum(p.x for p in r.points)/len(r.points), y=sum(p.y for p in r.points)/len(r.points)))
     for i,a in enumerate(data.routes):
         for b in data.routes[i+1:]:
@@ -171,7 +171,8 @@ def normalize(report, sid):
 def serialize_forecast(f):
     return dict(stream=f.stream_id,zone_id=f.zone_id,variable=f.variable,unit=f.unit,
         issued_s=int((f.issued_at-EPOCH).total_seconds()),target_s=int((f.target_at-EPOCH).total_seconds()),
-        available_s=int((f.received_at-EPOCH).total_seconds()),value=f.value)
+        available_s=int((f.received_at-EPOCH).total_seconds()),value=f.value,
+        channel_mask=f.channel_mask,missing_data_mask=f.missing_data_mask,applicability=f.applicability,model_version=f.model_or_provider_version)
 
 
 @router.post('/sessions/{sid}/advance')
@@ -233,7 +234,7 @@ def evidence(s):
     t=EPOCH+timedelta(seconds=max(0,s['time']))
     for z in s['venue'].zones:
         for var in UNITS:
-            rec=comparator.assess_information(s['observations'],t,z['zone_id'],var)
+            rec=comparator.assess_information(s['observations'],t,z['zone_id'],var,zone_type=z.get('zone_type'))
             flags=rec.per_variable_flags
             recent=[o for o in s['observations'] if o.zone_id==z['zone_id'] and o.variable==var and o.observed_at<=t]
             latest=max(recent,key=lambda o:(o.observed_at,o.received_at,o.report_id)) if recent else None
@@ -242,7 +243,9 @@ def evidence(s):
             coverage=min(1,len({o.source_id for o in recent if (t-o.observed_at).total_seconds()<=90})/2)
             score=round(100*freshness*coverage*(.5 if flags.get('conflict') else 1)*( .75 if flags.get('rapidly_changing') else 1),1) if latest else None
             out.append(dict(zone_id=z['zone_id'],variable=var,observed_value=latest.value if latest else None,
-                observation_age_s=rec.observation_age_seconds if latest else None,coverage=coverage,
+                observation_age_s=rec.observation_age_seconds if latest else None,coverage=rec.coverage,
+                coverage_basis=getattr(rec,'coverage_basis','No received source roster'),
+                conflict_graph_summary={k:v for k,v in getattr(rec,'conflict_graph',{}).items() if k.startswith('num_')},
                 conflict_count=len(rec.conflict_ids or []),flags=flags,trust_score=score))
     return out
 
@@ -259,7 +262,9 @@ def snapshot(sid):
         entry=grouped.setdefault(key,dict(zone_id=row['zone_id'],variable=row['variable'],unit=row['unit'],
             issued_s=row['issued_s'],target_s=row['target_s'],horizon_s=row['target_s']-row['issued_s'],
             architecture=None,central=None))
-        entry['architecture' if f.stream_id=='stream_b_architecture' else 'central']=f.value
+        stream='architecture' if f.stream_id=='stream_b_architecture' else 'central'
+        entry[stream]=f.value
+        for key in ('channel_mask','missing_data_mask','applicability','model_version'):entry[stream+'_'+key]=row[key]
     comparisons=list(grouped.values())
     metrics={}
     for row in comparisons:
@@ -318,6 +323,6 @@ def report(sid: str):
 def export(sid: str):
     with LOCK:
         get_session(sid);data=snapshot(sid);out=io.StringIO()
-        keys=['zone_id','variable','unit','issued_s','target_s','horizon_s','architecture','central','actual','difference','trust_score']
+        keys=['zone_id','variable','unit','issued_s','target_s','horizon_s','architecture','central','actual','difference','trust_score','architecture_model_version','central_model_version','architecture_channel_mask','central_channel_mask','architecture_missing_data_mask','central_missing_data_mask','architecture_applicability','central_applicability']
         writer=csv.DictWriter(out,fieldnames=keys);writer.writeheader();writer.writerows(data['comparisons'])
         return Response(out.getvalue(),media_type='text/csv',headers={'Content-Disposition':'attachment; filename="runtime_comparison.csv"'})

@@ -1,9 +1,9 @@
 # Crowd Disaster Information Reliability
 ## Architecture and dataflow specification
 
-**Version:** 0.1 · **Date:** 14 October 2026  
-**Status:** Proposed architecture for a crowd-disaster simulation prototype. This document is a design specification, not a claim of completed implementation or measured performance.  
-**Project title:** Working descriptive title; replace with the team's approved name.
+**Version:** 0.2 · **Date:** 15 October 2026
+**Status:** Architecture contract reconciled with the integrated implementation. The serving path and offline tree training exist. The error-driven hypernetwork/GNN candidate loop and gated active promotion remain design targets, not implemented features. See [integration evidence](INTEGRATION_AUDIT_RECONCILIATION.md) and [implementation status](IMPLEMENTATION_STATUS.md).
+**Project title:** Event Horizon — crowd information freshness and forecasting demonstrator.
 
 ## 1. Purpose and scope
 
@@ -57,7 +57,7 @@ flowchart TD
         OBS --> GRAPH["Observed spatial graph"]
         DT --> GRAPH
         GRAPH --> HYPER["Graph hypernetwork: generates node and edge values"]
-        HYPER --> GNN["Frozen production GNN"]
+        HYPER --> GNN["Frozen serving GNN"]
         GNN --> TS["Multivariate temporal forecaster"]
         DT -->|"Full vector at each time step"| TS
         OBS -->|"Observation history and masks"| TS
@@ -74,17 +74,17 @@ flowchart TD
     ADAPTER --> LOG
     LOG --> EVAL["Reference-based evaluation"]
     TRUTH --> EVAL
-    EVAL --> TRAIN["Candidate copy: train hypernetwork and GNN on forecast errors"]
-    TRAIN --> GATE{"Scenario validation passes?"}
+    EVAL -.-> TRAIN["Candidate copy: train hypernetwork and GNN on forecast errors"]
+    TRAIN -.-> GATE{"Scenario validation passes?"}
     MCRUN["Monte Carlo scenarios: observations and reference labels"] --> TREEFT["Decision-tree fine-tuning"]
     TREEFT -->|"Versioned tree release"| DT
-    GATE -->|"Versioned pipeline promotion"| HYPER
-    GATE -->|"Versioned pipeline promotion"| GNN
+    GATE -.->|"Versioned pipeline promotion"| HYPER
+    GATE -.->|"Versioned pipeline promotion"| GNN
     %% The temporal forecaster is not updated by this feedback loop
-    GATE -->|"No: retain active version"| KEEP["Current production remains active"]
+    GATE -.->|"No: retain active version"| KEEP["Current production remains active"]
 ```
 
-The gate promotes the hypernetwork and GNN together as one atomic release, because the GNN consumes the hypernetwork's generated values; they are not independent live edits. Forecast errors feed back only into this pair. The decision-tree bank is fine-tuned separately from Monte Carlo scenario data and reference labels. It receives no forecast-error feedback, and nothing flows back from the trees to the hypernetwork: the tree vector D enters the hypernetwork as a forward input only. The temporal forecaster is not changed by the loop. Every release produces a new pipeline version that records all component versions.
+Dashed feedback/promotion connections are unimplemented design targets. The specified gate promotes the hypernetwork and GNN together as one atomic release, because the GNN consumes the hypernetwork's generated values; they are not independent live edits. Forecast errors feed back only into this pair. The decision-tree bank is fine-tuned separately from Monte Carlo scenario data and reference labels. It receives no forecast-error feedback, and nothing flows back from the trees to the hypernetwork: the tree vector D enters the hypernetwork as a forward input only. The temporal forecaster is not changed by the loop. Every release produces a new pipeline version that records all component versions.
 
 ## 4. Component responsibilities
 
@@ -107,6 +107,8 @@ The gate promotes the hypernetwork and GNN together as one atomic release, becau
 | Dashboard | Display both streams, report evidence and results | Zone view, time-series plots and exports |
 
 ## 5. Spatial and temporal representation
+
+Current checkpoint layout: `raw(6) | age(6) | observation_mask(6) | D(6) | H(16) = 40`. Tree masks remain separate metadata and spatial inputs. The conceptual notation below does not authorize changing the checkpoint ordering.
 
 ### Spatial graph
 
@@ -277,7 +279,7 @@ Numeric heads can use scaled MSE or Huber loss; the exit head can use binary cro
 
 Vary crowd arrival rates, destination preferences, route choices, exit restrictions, observation intervals, delays and outages through seeded scenarios. Record the sampled parameters with every run.
 
-The role of the Monte Carlo runs is to provide data for fine-tuning the decision trees. Each run supplies the observed stream as tree inputs and the simulator's reference current-state values as tree targets. Monte Carlo runs do not train or select the hypernetwork or GNN, and forecast errors are not used to fine-tune the trees.
+The Monte Carlo selection module is confined to decision-tree fitting and selection. Each run supplies observed features and reference current-state tree targets; forecast errors do not fine-tune the trees. Initial supervised neural bootstrapping in section 9, step 5 may consume the resulting offline scenario dataset and whole-scenario out-of-sample tree outputs, with a neural configuration fixed before training. That bootstrap is not the feedback loop and does not search neural hyperparameters. This distinction reconciles initial training in section 9 with the separate update paths. The archived `mc_v2` experiment searched two joint configurations; that historical experiment is preserved for reproducibility, not presented as an architecture-compliant neural selection mechanism. The current trainer selects only tree depth/cluster count and fixes hidden width/learning rate.
 
 Use disjoint training, validation and final-test scenario sets. Hold out full scenario seeds and, where possible, venue layouts. Evaluate across scenarios and report variable-specific results. Select candidate models using aggregate validation criteria and scenario-group checks, then evaluate the selected version on the reserved test set.
 
@@ -312,7 +314,15 @@ Report MAE/RMSE by variable and horizon, exit-state classification/calibration m
 
 ## 12. Implementation and access status
 
-The proposed stack is documented in README.md. No application code, deployment, checkpoint, dataset, account or measured benchmark was supplied for this documentation task. Runtime instructions must be checked against the implemented repository before submission. Implementation status: the forward path (tree bank, hypernetwork, GNN, temporal forecaster and dual-stream comparison) is implemented, and only the tree bank is fitted, once, on the bundled scenarios. The hypernetwork, GNN and temporal model run with initial weights. The two update paths in sections 3, 7 and 9, which are Monte Carlo tree fine-tuning and the hypernetwork-GNN feedback loop with gated promotion, are design targets and are not yet implemented. The local evaluation design uses bundled scenarios and a disclosed central-source fixture so that evaluators do not need paid external access.
+The implemented entry point is `hosted_server:app`: one public port serves Studio at `/` and the combined random-flow/forecast dashboard at `/dashboard/`. `start_review.py` starts it on loopback for local review. Camera/counter/warden reports are released causally, then passed through the contextual tree bank, hypernetwork, GNN and GRU every five seconds. Fixed forecast horizons are 30/60/120 s. Retrospective labels are supplied after inference to a separate evaluation store. This one-process demonstration provides logical separation; the separate v3 services/Compose deployment provide a different, access-controlled observation/reference interface.
+
+The temporal checkpoint contract is exactly `U = [raw(6), normalized_age(6), observation_mask(6), D(6), H(16)]`, 40 dimensions and 12 five-second steps. Tree/applicability masks are retained in the spatial inputs, records and exports, but are not extra GRU slots; changing that layout requires a new checkpoint, not reinterpretation of existing weights. The hypernetwork generates node and edge representations, not a dynamically generated GNN architecture.
+
+The interactive path uses corridor zones derived from the routes and the experimental `models/candidates/mc_v2` checkpoint. Unmeasured route capacity is explicitly unknown. Custom-route transfer is unvalidated. The preserved Twin v3 subsystem uses canonical physical zones, a 58-feature tree contract and its own manifests; it is not substituted into the route-context path. `/api/twin-v3/evaluations` reads persisted v3 outputs, including A* recommendations. The new live planner instead compares bounded synthetic clearance actions from current reports; it neither promises an optimal evacuation nor reads hidden future events.
+
+Offline training, model readiness checks, missing-artifact refusal and atomic spatial-pair serialization exist. Automated error-driven candidate training with the tree bank/GRU frozen, compatibility-gated active promotion and rollback are not implemented. Serving remains frozen; no frontend action updates model weights. Do not describe serialization alone as the completed feedback loop.
+
+Demo mode requires no paid provider or account. Optional `AUTH_MODE=api_key` uses an independent `APP_API_KEY`; all `/api/` routes share the boundary except readiness/config/health. The dashboard's API access control stores the key only for the browser session. Production processes initialize/upgrade the DB explicitly with `python -m crowd_reliability db-init`; local demo startup performs the additive schema upgrade automatically. See README for test and launch commands.
 
 ## 13. Design references
 

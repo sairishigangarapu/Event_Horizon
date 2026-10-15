@@ -58,3 +58,10 @@ deploy/twin_studio/.env
 # Archive copies keep their original dist/ folders (byte-identical provenance; see SOURCE.json files).
 !services/twin_studio/studio/event_horizon_twin_studio/dist/
 !services/twin_studio/v3/archive/event_horizon_twin_studio/dist/
+.DS_Store
+**/.DS_Store
+
+# Unpublished review outputs and local environments.
+.venv_review/
+data/review_outputs/
+review/captured_runs.json

@@ -14,14 +14,9 @@ from __future__ import annotations
 import pytest
 from datetime import datetime, timedelta, timezone
 
-try:
-    from person4.event_horizon_p4.comparison import ForecastComparator, summarise_comparison
-    from person4.event_horizon_p4.config import STREAM_A_ID, STREAM_B_ID, VAR_UNITS
-    from person4.event_horizon_p4.inference import ForecastRecord
-except ImportError:
-    from event_horizon_p4.comparison import ForecastComparator, summarise_comparison
-    from event_horizon_p4.config import STREAM_A_ID, STREAM_B_ID, VAR_UNITS
-    from event_horizon_p4.inference import ForecastRecord
+from person4.event_horizon_p4.comparison import ForecastComparator, summarise_comparison
+from person4.event_horizon_p4.config import STREAM_A_ID, STREAM_B_ID, VAR_UNITS
+from person4.event_horizon_p4.inference import ForecastRecord
 
 
 # ---------------------------------------------------------------------------
@@ -163,6 +158,25 @@ class TestUnitMismatch:
         assert len(report.paired) == 1
         assert len(report.unit_skipped) == 0
 
+    def test_multiple_target_at_unit_mismatch_isolation(self):
+        """Unit mismatch on one target_at does not prevent pairing on a matching target_at."""
+        t1 = _T0 + timedelta(seconds=30)
+        # For T0: units match ('p/m2')
+        # For T1: units mismatch ('p/m2' vs 'persons/m2')
+        b_recs = [
+            _make_record("zone_00", "density", _T0, 2.0, STREAM_B_ID, unit="p/m2"),
+            _make_record("zone_00", "density", t1,  2.5, STREAM_B_ID, unit="p/m2"),
+        ]
+        a_recs = [
+            _make_record("zone_00", "density", _T0, 1.8, STREAM_A_ID, unit="p/m2"),
+            _make_record("zone_00", "density", t1,  2.3, STREAM_A_ID, unit="persons/m2"),
+        ]
+        report = ForecastComparator().compare(b_recs, a_recs)
+        assert len(report.paired) == 1, "Only matching target_at should pair"
+        assert report.paired[0].target_at == _T0
+        assert len(report.unit_skipped) == 1, "Mismatched target_at should be recorded as unit_skipped"
+        assert report.unit_skipped[0] == ("sc_test", "zone_00", "density")
+
 
 # ---------------------------------------------------------------------------
 # Causal timestamp filter
@@ -176,6 +190,39 @@ class TestCausalFilter:
         a_recs = [_make_record("zone_00", "density", _T0, 1.5, STREAM_A_ID)]
         report = ForecastComparator().compare(b_recs, a_recs, evaluation_time=_NOW)
         assert len(report.paired) == 0
+
+    def test_future_received_at_filtered_out(self):
+        """issued_at is in the past but received_at is in the future → filtered out."""
+        past_issued = _NOW - timedelta(hours=1)
+        future_recv = _NOW + timedelta(hours=1)
+        # Create a record where issued_at passes the filter but received_at does not.
+        b_recs = [
+            _make_record("zone_00", "density", _T0, 2.0, STREAM_B_ID,
+                         issued_at=past_issued)
+        ]
+        # Manually override received_at by constructing a fresh ForecastRecord
+        from person4.event_horizon_p4.config import VAR_UNITS
+        from person4.event_horizon_p4.inference import ForecastRecord
+        b_recs = [ForecastRecord(
+            forecast_id   = "test_recv_filter",
+            stream_id     = STREAM_B_ID,
+            scenario_id   = "sc_test",
+            zone_id       = "zone_00",
+            variable      = "density",
+            unit          = VAR_UNITS["density"],
+            issued_at     = past_issued,    # past  → passes issued_at check
+            received_at   = future_recv,    # future → fails received_at check
+            target_at     = _T0,
+            value         = 2.0,
+            model_version = "test_v1",
+            horizon_sec   = 30,
+        )]
+        a_recs = [_make_record("zone_00", "density", _T0, 1.5, STREAM_A_ID)]
+        report = ForecastComparator().compare(b_recs, a_recs, evaluation_time=_NOW)
+        assert len(report.paired) == 0, (
+            "A record with received_at > evaluation_time must be filtered out "
+            "even when issued_at is in the past"
+        )
 
     def test_past_issued_at_passes_filter(self):
         past_time = _NOW - timedelta(hours=1)
