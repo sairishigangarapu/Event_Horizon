@@ -1,0 +1,174 @@
+# Event Horizon Twin Studio - Phase 4 local prototype (NOT a production deployment).
+#
+#   python deploy/twin_studio/init_secrets.py
+#   docker compose -f deploy/twin_studio/compose.yaml up -d --build --wait
+#   docker compose -f deploy/twin_studio/compose.yaml --profile publish run --rm publisher
+#   docker compose -f deploy/twin_studio/compose.yaml --profile test run --rm tests
+#   docker compose -f deploy/twin_studio/compose.yaml --profile test run --rm main-app-probe
+#
+# Networks (all storage networks and the reference network are `internal`: no route off-host):
+#   eh_publish_storage  minio, minio-init, publisher, (tests)
+#   eh_obs_storage      minio, observation-api, (tests)
+#   eh_ref_storage      minio, reference-api, (tests)
+#   eh_observation      observation-api [+ the future main forecasting app], main-app-probe, (tests)
+#   eh_reference        reference-api [+ authorized evaluators only], (tests)
+# The main application must join eh_observation ONLY. The reference API publishes no host port
+# unless compose.reference-host.yaml is added explicitly (binds 127.0.0.1, token still required).
+name: eh-twin
+
+x-service-image: &service-image
+  image: eh-twin-services:${EH_IMAGE_TAG:-phase4}
+  read_only: true
+  tmpfs: [/tmp]
+  security_opt: [no-new-privileges:true]
+  cap_drop: [ALL]
+
+services:
+  minio:
+    build: {context: ./minio}
+    image: ${EH_MINIO_IMAGE:-eh-twin-minio:RELEASE.2025-10-15T17-29-55Z}
+    command: ["server", "/data"]
+    environment:
+      MINIO_ROOT_USER_FILE: /run/secrets/minio_root_user
+      MINIO_ROOT_PASSWORD_FILE: /run/secrets/minio_root_password
+      MINIO_BROWSER: "off"
+    secrets: [minio_root_user, minio_root_password]
+    volumes: [minio_data:/data]
+    networks: [eh_publish_storage, eh_obs_storage, eh_ref_storage]
+    security_opt: [no-new-privileges:true]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://127.0.0.1:9000/minio/health/live',timeout=3)"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  minio-init:
+    image: ${EH_MINIO_IMAGE:-eh-twin-minio:RELEASE.2025-10-15T17-29-55Z}
+    entrypoint: ["/bin/sh", "/init/init.sh"]
+    environment:
+      EH_RETENTION_MODE: ${EH_RETENTION_MODE:-GOVERNANCE}
+      EH_RETENTION_DAYS: ${EH_RETENTION_DAYS:-30}
+    secrets: [minio_root_user, minio_root_password,
+              minio_publisher_access_key, minio_publisher_secret_key,
+              minio_obs_reader_access_key, minio_obs_reader_secret_key,
+              minio_ref_reader_access_key, minio_ref_reader_secret_key]
+    volumes: [./minio:/init:ro]
+    networks: [eh_publish_storage]
+    depends_on: {minio: {condition: service_healthy}}
+    restart: "no"
+
+  observation-api:
+    <<: *service-image
+    build: {context: ../.., dockerfile: deploy/twin_studio/Dockerfile}
+    command: ["uvicorn", "--factory", "services.twin_studio.api.observation_app:app_from_env",
+              "--host", "0.0.0.0", "--port", "8000", "--no-server-header"]
+    environment:
+      EH_S3_ENDPOINT: http://minio:9000
+      EH_OBS_READER_ACCESS_KEY_FILE: /run/secrets/minio_obs_reader_access_key
+      EH_OBS_READER_SECRET_KEY_FILE: /run/secrets/minio_obs_reader_secret_key
+      EH_OBS_CONTROL_TOKEN_SHA256_FILE: /run/secrets/observation_control_token_sha256
+      EH_OBS_REPLAY_DIR: /var/lib/eh-observation/replays
+    secrets: [minio_obs_reader_access_key, minio_obs_reader_secret_key, observation_control_token_sha256]
+    volumes: [observation_state:/var/lib/eh-observation]
+    networks: [eh_obs_storage, eh_observation]
+    ports: ["127.0.0.1:${EH_OBS_API_PORT:-8081}:8000"]
+    depends_on: {minio-init: {condition: service_completed_successfully}}
+    healthcheck: &api-health
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8000/health',timeout=3)"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  reference-api:
+    <<: *service-image
+    command: ["uvicorn", "--factory", "services.twin_studio.api.reference_app:app_from_env",
+              "--host", "0.0.0.0", "--port", "8000", "--no-server-header"]
+    environment:
+      EH_S3_ENDPOINT: http://minio:9000
+      EH_REF_READER_ACCESS_KEY_FILE: /run/secrets/minio_ref_reader_access_key
+      EH_REF_READER_SECRET_KEY_FILE: /run/secrets/minio_ref_reader_secret_key
+      EH_REF_TOKEN_SHA256_FILE: /run/secrets/reference_api_token_sha256
+      EH_REF_SESSION_DIR: /var/lib/eh-reference/sessions
+    secrets: [minio_ref_reader_access_key, minio_ref_reader_secret_key, reference_api_token_sha256]
+    volumes: [reference_state:/var/lib/eh-reference]
+    networks: [eh_ref_storage, eh_reference]
+    depends_on:
+      minio-init: {condition: service_completed_successfully}
+      observation-api: {condition: service_started}   # same image; built once by observation-api
+    healthcheck: *api-health
+
+  publisher:
+    <<: *service-image
+    profiles: [publish]
+    command: ["python", "-m", "services.twin_studio.storage.publisher", "--spec", "/app/specs/synthetic_fixture_run.json"]
+    environment:
+      EH_S3_ENDPOINT: http://minio:9000
+      EH_PUBLISHER_ACCESS_KEY_FILE: /run/secrets/minio_publisher_access_key
+      EH_PUBLISHER_SECRET_KEY_FILE: /run/secrets/minio_publisher_secret_key
+      EH_TWIN_ID_KEYRING_FILE: /run/secrets/id_keyring.json
+      EH_PUBLISHER_LOCAL_ROOT: /var/lib/eh-publisher/bundles
+    secrets: [minio_publisher_access_key, minio_publisher_secret_key, id_keyring.json]
+    volumes: [publisher_state:/var/lib/eh-publisher]
+    networks: [eh_publish_storage]
+    depends_on: {minio-init: {condition: service_completed_successfully}}
+
+  # ---- test profile: integration harness (acts as every principal, test-only) and network probe
+  tests:
+    <<: *service-image
+    profiles: [test]
+    command: ["python", "-m", "pytest", "-q", "-p", "no:cacheprovider", "-W", "ignore", "tests/twin_phase4_integration"]
+    environment:
+      EH_TWIN_INTEGRATION: "1"
+      EH_S3_ENDPOINT: http://minio:9000
+      EH_OBS_API_URL: http://observation-api:8000
+      EH_REF_API_URL: http://reference-api:8000
+      EH_SECRETS_DIR: /run/secrets
+      EH_TWIN_ID_KEYRING_FILE: /run/secrets/id_keyring.json
+      EH_PUBLISHER_ACCESS_KEY_FILE: /run/secrets/minio_publisher_access_key
+      EH_PUBLISHER_SECRET_KEY_FILE: /run/secrets/minio_publisher_secret_key
+    secrets: [minio_root_user, minio_root_password,
+              minio_publisher_access_key, minio_publisher_secret_key,
+              minio_obs_reader_access_key, minio_obs_reader_secret_key,
+              minio_ref_reader_access_key, minio_ref_reader_secret_key,
+              id_keyring.json, reference_api_token, observation_control_token]
+    networks: [eh_publish_storage, eh_obs_storage, eh_ref_storage, eh_observation, eh_reference]
+    depends_on:
+      observation-api: {condition: service_healthy}
+      reference-api: {condition: service_healthy}
+
+  main-app-probe:
+    <<: *service-image
+    profiles: [test]
+    command: ["python", "tests/twin_phase4_integration/probe_main_network.py"]
+    networks: [eh_observation]          # exactly what the main forecasting app is allowed to join
+    depends_on:
+      observation-api: {condition: service_healthy}
+      reference-api: {condition: service_healthy}
+
+networks:
+  eh_publish_storage: {internal: true}
+  eh_obs_storage: {internal: true}
+  eh_ref_storage: {internal: true}
+  eh_reference: {internal: true}
+  eh_observation: {}
+
+volumes:
+  minio_data:
+  observation_state:
+  reference_state:
+  publisher_state:
+
+secrets:
+  minio_root_user: {file: ./secrets/minio_root_user}
+  minio_root_password: {file: ./secrets/minio_root_password}
+  minio_publisher_access_key: {file: ./secrets/minio_publisher_access_key}
+  minio_publisher_secret_key: {file: ./secrets/minio_publisher_secret_key}
+  minio_obs_reader_access_key: {file: ./secrets/minio_obs_reader_access_key}
+  minio_obs_reader_secret_key: {file: ./secrets/minio_obs_reader_secret_key}
+  minio_ref_reader_access_key: {file: ./secrets/minio_ref_reader_access_key}
+  minio_ref_reader_secret_key: {file: ./secrets/minio_ref_reader_secret_key}
+  id_keyring.json: {file: ./secrets/id_keyring.json}
+  reference_api_token: {file: ./secrets/reference_api_token}
+  reference_api_token_sha256: {file: ./secrets/reference_api_token.sha256}
+  observation_control_token: {file: ./secrets/observation_control_token}
+  observation_control_token_sha256: {file: ./secrets/observation_control_token.sha256}

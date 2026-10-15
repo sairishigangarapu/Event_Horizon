@@ -1,0 +1,644 @@
+{
+  "bank_version": "dt_bank_v3_topo_1",
+  "feature_schema": "eh-v3-topo-features-1",
+  "selection": {
+    "density": {
+      "max_depth": 10,
+      "min_samples_leaf": 5,
+      "val_score": 0.021992025264486962,
+      "val_metric": "mae"
+    },
+    "speed": {
+      "max_depth": 8,
+      "min_samples_leaf": 5,
+      "val_score": 0.1182549651797796,
+      "val_metric": "mae"
+    },
+    "inflow": {
+      "max_depth": 8,
+      "min_samples_leaf": 20,
+      "val_score": 0.24517991342256912,
+      "val_metric": "mae"
+    },
+    "outflow": {
+      "max_depth": 8,
+      "min_samples_leaf": 20,
+      "val_score": 0.21025223259832526,
+      "val_metric": "mae"
+    },
+    "queue_length": {
+      "max_depth": 6,
+      "min_samples_leaf": 20,
+      "val_score": 4.2235792587383365,
+      "val_metric": "mae"
+    },
+    "exit_open": {
+      "max_depth": 4,
+      "min_samples_leaf": 5,
+      "val_score": 0.01013946847990615,
+      "val_metric": "brier"
+    }
+  },
+  "splits": {
+    "train": [
+      "mc_blockage_000",
+      "mc_blockage_001",
+      "mc_blockage_002",
+      "mc_blockage_003",
+      "mc_blockage_004",
+      "mc_blockage_005",
+      "mc_blockage_006",
+      "mc_blockage_007",
+      "mc_blockage_008",
+      "mc_compound_000",
+      "mc_compound_001",
+      "mc_compound_002",
+      "mc_compound_003",
+      "mc_compound_004",
+      "mc_compound_005",
+      "mc_compound_006",
+      "mc_compound_007",
+      "mc_compound_008",
+      "mc_normal_000",
+      "mc_normal_001",
+      "mc_normal_002",
+      "mc_normal_003",
+      "mc_normal_004",
+      "mc_normal_005",
+      "mc_normal_006",
+      "mc_normal_007",
+      "mc_normal_008",
+      "mc_observation_outage_000",
+      "mc_observation_outage_001",
+      "mc_observation_outage_002",
+      "mc_observation_outage_003",
+      "mc_observation_outage_004",
+      "mc_observation_outage_005",
+      "mc_observation_outage_006",
+      "mc_observation_outage_007",
+      "mc_observation_outage_008",
+      "mc_surge_000",
+      "mc_surge_001",
+      "mc_surge_002",
+      "mc_surge_003",
+      "mc_surge_004",
+      "mc_surge_005",
+      "mc_surge_006",
+      "mc_surge_007",
+      "mc_surge_008"
+    ],
+    "val": [
+      "mc_blockage_009",
+      "mc_blockage_010",
+      "mc_blockage_011",
+      "mc_compound_009",
+      "mc_compound_010",
+      "mc_compound_011",
+      "mc_normal_009",
+      "mc_normal_010",
+      "mc_normal_011",
+      "mc_observation_outage_009",
+      "mc_observation_outage_010",
+      "mc_observation_outage_011",
+      "mc_surge_009",
+      "mc_surge_010",
+      "mc_surge_011"
+    ],
+    "test": [
+      "mc_blockage_012",
+      "mc_blockage_013",
+      "mc_blockage_014",
+      "mc_blockage_015",
+      "mc_compound_012",
+      "mc_compound_013",
+      "mc_compound_014",
+      "mc_compound_015",
+      "mc_normal_012",
+      "mc_normal_013",
+      "mc_normal_014",
+      "mc_normal_015",
+      "mc_observation_outage_012",
+      "mc_observation_outage_013",
+      "mc_observation_outage_014",
+      "mc_observation_outage_015",
+      "mc_surge_012",
+      "mc_surge_013",
+      "mc_surge_014",
+      "mc_surge_015"
+    ]
+  },
+  "folds": 4,
+  "sklearn_version": "1.7.2",
+  "test_metrics": {
+    "density": {
+      "tree": {
+        "n": 12958,
+        "mae": 0.0245,
+        "rmse": 0.0871
+      },
+      "latest_report_baseline": {
+        "n": 12958,
+        "mae": 0.0241,
+        "rmse": 0.0712
+      },
+      "train_mean_baseline": {
+        "n": 12958,
+        "mae": 0.0965,
+        "rmse": 0.167
+      },
+      "by_regime": {
+        "blockage": {
+          "tree": {
+            "n": 2552,
+            "mae": 0.0115,
+            "rmse": 0.0319
+          },
+          "latest_report_baseline": {
+            "n": 2552,
+            "mae": 0.0131,
+            "rmse": 0.0427
+          }
+        },
+        "compound": {
+          "tree": {
+            "n": 2684,
+            "mae": 0.0255,
+            "rmse": 0.0877
+          },
+          "latest_report_baseline": {
+            "n": 2684,
+            "mae": 0.0265,
+            "rmse": 0.0775
+          }
+        },
+        "normal": {
+          "tree": {
+            "n": 2486,
+            "mae": 0.0124,
+            "rmse": 0.0341
+          },
+          "latest_report_baseline": {
+            "n": 2486,
+            "mae": 0.0134,
+            "rmse": 0.0434
+          }
+        },
+        "observation_outage": {
+          "tree": {
+            "n": 2618,
+            "mae": 0.055,
+            "rmse": 0.1601
+          },
+          "latest_report_baseline": {
+            "n": 2618,
+            "mae": 0.053,
+            "rmse": 0.1176
+          }
+        },
+        "surge": {
+          "tree": {
+            "n": 2618,
+            "mae": 0.0172,
+            "rmse": 0.0442
+          },
+          "latest_report_baseline": {
+            "n": 2618,
+            "mae": 0.0135,
+            "rmse": 0.0391
+          }
+        }
+      }
+    },
+    "speed": {
+      "tree": {
+        "n": 6837,
+        "mae": 0.1161,
+        "rmse": 0.2164
+      },
+      "latest_report_baseline": {
+        "n": 6837,
+        "mae": 0.1198,
+        "rmse": 0.2076
+      },
+      "train_mean_baseline": {
+        "n": 6837,
+        "mae": 0.3788,
+        "rmse": 0.4608
+      },
+      "by_regime": {
+        "blockage": {
+          "tree": {
+            "n": 1352,
+            "mae": 0.081,
+            "rmse": 0.123
+          },
+          "latest_report_baseline": {
+            "n": 1352,
+            "mae": 0.0911,
+            "rmse": 0.1441
+          }
+        },
+        "compound": {
+          "tree": {
+            "n": 1379,
+            "mae": 0.1199,
+            "rmse": 0.222
+          },
+          "latest_report_baseline": {
+            "n": 1379,
+            "mae": 0.1282,
+            "rmse": 0.2412
+          }
+        },
+        "normal": {
+          "tree": {
+            "n": 1296,
+            "mae": 0.0828,
+            "rmse": 0.1139
+          },
+          "latest_report_baseline": {
+            "n": 1296,
+            "mae": 0.0928,
+            "rmse": 0.1394
+          }
+        },
+        "observation_outage": {
+          "tree": {
+            "n": 1416,
+            "mae": 0.2226,
+            "rmse": 0.372
+          },
+          "latest_report_baseline": {
+            "n": 1416,
+            "mae": 0.2097,
+            "rmse": 0.3116
+          }
+        },
+        "surge": {
+          "tree": {
+            "n": 1394,
+            "mae": 0.0694,
+            "rmse": 0.1166
+          },
+          "latest_report_baseline": {
+            "n": 1394,
+            "mae": 0.0731,
+            "rmse": 0.1303
+          }
+        }
+      }
+    },
+    "inflow": {
+      "tree": {
+        "n": 12738,
+        "mae": 0.2435,
+        "rmse": 0.6969
+      },
+      "latest_report_baseline": {
+        "n": 12738,
+        "mae": 0.2502,
+        "rmse": 0.7177
+      },
+      "train_mean_baseline": {
+        "n": 12738,
+        "mae": 0.6535,
+        "rmse": 1.0202
+      },
+      "by_regime": {
+        "blockage": {
+          "tree": {
+            "n": 2508,
+            "mae": 0.2152,
+            "rmse": 0.3721
+          },
+          "latest_report_baseline": {
+            "n": 2508,
+            "mae": 0.2261,
+            "rmse": 0.4074
+          }
+        },
+        "compound": {
+          "tree": {
+            "n": 2640,
+            "mae": 0.2487,
+            "rmse": 1.2384
+          },
+          "latest_report_baseline": {
+            "n": 2640,
+            "mae": 0.2529,
+            "rmse": 1.272
+          }
+        },
+        "normal": {
+          "tree": {
+            "n": 2442,
+            "mae": 0.2358,
+            "rmse": 0.4017
+          },
+          "latest_report_baseline": {
+            "n": 2442,
+            "mae": 0.2494,
+            "rmse": 0.4311
+          }
+        },
+        "observation_outage": {
+          "tree": {
+            "n": 2574,
+            "mae": 0.2735,
+            "rmse": 0.4651
+          },
+          "latest_report_baseline": {
+            "n": 2574,
+            "mae": 0.2927,
+            "rmse": 0.4755
+          }
+        },
+        "surge": {
+          "tree": {
+            "n": 2574,
+            "mae": 0.2432,
+            "rmse": 0.5712
+          },
+          "latest_report_baseline": {
+            "n": 2574,
+            "mae": 0.2292,
+            "rmse": 0.5707
+          }
+        }
+      }
+    },
+    "outflow": {
+      "tree": {
+        "n": 12738,
+        "mae": 0.2066,
+        "rmse": 0.3562
+      },
+      "latest_report_baseline": {
+        "n": 12738,
+        "mae": 0.2394,
+        "rmse": 0.4168
+      },
+      "train_mean_baseline": {
+        "n": 12738,
+        "mae": 0.5774,
+        "rmse": 0.7404
+      },
+      "by_regime": {
+        "blockage": {
+          "tree": {
+            "n": 2508,
+            "mae": 0.1906,
+            "rmse": 0.3287
+          },
+          "latest_report_baseline": {
+            "n": 2508,
+            "mae": 0.2337,
+            "rmse": 0.4099
+          }
+        },
+        "compound": {
+          "tree": {
+            "n": 2640,
+            "mae": 0.1834,
+            "rmse": 0.3226
+          },
+          "latest_report_baseline": {
+            "n": 2640,
+            "mae": 0.1986,
+            "rmse": 0.3552
+          }
+        },
+        "normal": {
+          "tree": {
+            "n": 2442,
+            "mae": 0.2166,
+            "rmse": 0.365
+          },
+          "latest_report_baseline": {
+            "n": 2442,
+            "mae": 0.2635,
+            "rmse": 0.4451
+          }
+        },
+        "observation_outage": {
+          "tree": {
+            "n": 2574,
+            "mae": 0.2555,
+            "rmse": 0.4268
+          },
+          "latest_report_baseline": {
+            "n": 2574,
+            "mae": 0.2991,
+            "rmse": 0.4834
+          }
+        },
+        "surge": {
+          "tree": {
+            "n": 2574,
+            "mae": 0.1875,
+            "rmse": 0.3276
+          },
+          "latest_report_baseline": {
+            "n": 2574,
+            "mae": 0.2045,
+            "rmse": 0.3807
+          }
+        }
+      }
+    },
+    "queue_length": {
+      "tree": {
+        "n": 12958,
+        "mae": 3.6816,
+        "rmse": 15.6536
+      },
+      "latest_report_baseline": {
+        "n": 12958,
+        "mae": 3.6973,
+        "rmse": 16.1238
+      },
+      "train_mean_baseline": {
+        "n": 12958,
+        "mae": 22.4455,
+        "rmse": 44.8922
+      },
+      "by_regime": {
+        "blockage": {
+          "tree": {
+            "n": 2552,
+            "mae": 0.8207,
+            "rmse": 4.0341
+          },
+          "latest_report_baseline": {
+            "n": 2552,
+            "mae": 0.6485,
+            "rmse": 2.9055
+          }
+        },
+        "compound": {
+          "tree": {
+            "n": 2684,
+            "mae": 5.5606,
+            "rmse": 22.3566
+          },
+          "latest_report_baseline": {
+            "n": 2684,
+            "mae": 6.8738,
+            "rmse": 28.0478
+          }
+        },
+        "normal": {
+          "tree": {
+            "n": 2486,
+            "mae": 0.5085,
+            "rmse": 2.451
+          },
+          "latest_report_baseline": {
+            "n": 2486,
+            "mae": 0.4306,
+            "rmse": 2.0157
+          }
+        },
+        "observation_outage": {
+          "tree": {
+            "n": 2618,
+            "mae": 8.374,
+            "rmse": 24.2151
+          },
+          "latest_report_baseline": {
+            "n": 2618,
+            "mae": 8.3743,
+            "rmse": 20.8387
+          }
+        },
+        "surge": {
+          "tree": {
+            "n": 2618,
+            "mae": 2.865,
+            "rmse": 9.6158
+          },
+          "latest_report_baseline": {
+            "n": 2618,
+            "mae": 1.8376,
+            "rmse": 5.8244
+          }
+        }
+      }
+    },
+    "exit_open": {
+      "tree": {
+        "n": 3534,
+        "mae": 0.0234,
+        "rmse": 0.1136,
+        "brier": 0.0129,
+        "accuracy": 0.9734
+      },
+      "latest_report_baseline": {
+        "n": 3534,
+        "mae": 0.0287,
+        "rmse": 0.1674,
+        "brier": 0.028,
+        "accuracy": 0.972
+      },
+      "train_mean_baseline": {
+        "n": 3534,
+        "mae": 0.061,
+        "rmse": 0.1675,
+        "brier": 0.0281,
+        "accuracy": 0.9711
+      },
+      "by_regime": {
+        "blockage": {
+          "tree": {
+            "n": 696,
+            "mae": 0.0623,
+            "rmse": 0.1892,
+            "brier": 0.0358,
+            "accuracy": 0.9052
+          },
+          "latest_report_baseline": {
+            "n": 696,
+            "mae": 0.0367,
+            "rmse": 0.1896,
+            "brier": 0.0359,
+            "accuracy": 0.9641
+          }
+        },
+        "compound": {
+          "tree": {
+            "n": 732,
+            "mae": 0.0298,
+            "rmse": 0.1342,
+            "brier": 0.018,
+            "accuracy": 0.9699
+          },
+          "latest_report_baseline": {
+            "n": 732,
+            "mae": 0.0403,
+            "rmse": 0.1991,
+            "brier": 0.0396,
+            "accuracy": 0.9604
+          }
+        },
+        "normal": {
+          "tree": {
+            "n": 678,
+            "mae": 0.0113,
+            "rmse": 0.0773,
+            "brier": 0.006,
+            "accuracy": 0.9941
+          },
+          "latest_report_baseline": {
+            "n": 678,
+            "mae": 0.0285,
+            "rmse": 0.1674,
+            "brier": 0.028,
+            "accuracy": 0.972
+          }
+        },
+        "observation_outage": {
+          "tree": {
+            "n": 714,
+            "mae": 0.009,
+            "rmse": 0.0519,
+            "brier": 0.0027,
+            "accuracy": 0.9986
+          },
+          "latest_report_baseline": {
+            "n": 714,
+            "mae": 0.0182,
+            "rmse": 0.1298,
+            "brier": 0.0169,
+            "accuracy": 0.9832
+          }
+        },
+        "surge": {
+          "tree": {
+            "n": 714,
+            "mae": 0.0051,
+            "rmse": 0.0465,
+            "brier": 0.0022,
+            "accuracy": 0.9986
+          },
+          "latest_report_baseline": {
+            "n": 714,
+            "mae": 0.02,
+            "rmse": 0.1401,
+            "brier": 0.0196,
+            "accuracy": 0.9804
+          }
+        }
+      }
+    }
+  },
+  "feature_importance_neighbour_share": {
+    "density": 0.1498,
+    "speed": 0.0808,
+    "inflow": 0.0556,
+    "outflow": 0.023,
+    "queue_length": 0.0203,
+    "exit_open": 0.127
+  },
+  "dataset": "mc_v1_n16_seed2026",
+  "dataset_samples_manifest_sha256": "92d09643a45e3a6678e95548aa90e88a22df3924137fe93736a024b7f04b2a8a"
+}

@@ -1,0 +1,1 @@
+importScripts('engine.js');onmessage=({data})=>{try{const results={};for(const mode of ['ideal','custom','random']){postMessage({progress:mode});results[mode]=TwinEngine.simulate(data,mode)}postMessage({results})}catch(e){postMessage({error:e.message})}};

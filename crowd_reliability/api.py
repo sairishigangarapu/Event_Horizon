@@ -387,3 +387,39 @@ def get_tree_outputs(
         "channel_metadata": result.channel_metadata,
         "zones": result.to_zone_records(),
     }
+
+
+# --- Twin Studio v3 partial-information outputs (read-only) -------------------
+# Serves only persisted pipeline outputs (services/twin_studio/v3/outputs_view.py). The API process
+# never reads Twin run outputs, hidden truth, scenes or observation streams, and cannot start or
+# advance a replay.
+
+def _twin_v3():
+    from services.twin_studio.v3 import outputs_view
+    return outputs_view
+
+
+@app.get("/api/twin-v3/evaluations")
+def twin_v3_evaluations():
+    return {"evaluations": _twin_v3().list_evaluations()}
+
+
+@app.get("/api/twin-v3/evaluations/{eval_id}")
+def twin_v3_report(eval_id: str):
+    ov = _twin_v3()
+    try:
+        return ov.report(eval_id)
+    except ov.OutputsError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.get("/api/twin-v3/evaluations/{eval_id}/{kind}")
+def twin_v3_records(eval_id: str, kind: str, as_of_s: Optional[float] = Query(default=None, ge=0),
+                    limit: int = Query(default=500, ge=1, le=5000), offset: int = Query(default=0, ge=0)):
+    ov = _twin_v3()
+    try:
+        rows = ov.records(eval_id, kind, as_of_s=as_of_s)
+    except ov.OutputsError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return {"evaluation_id": eval_id, "kind": kind, "as_of_s": as_of_s, "total": len(rows),
+            "records": rows[offset: offset + limit]}

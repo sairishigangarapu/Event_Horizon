@@ -1,0 +1,19 @@
+{
+  "environment_id": "eh_twin_studio",
+  "map_version": "twin_venue_v1",
+  "pipeline_version": "eh_twin_studio_pipeline_v0_untrained",
+  "artifacts": {},
+  "training_status": {
+    "tree_bank": "unavailable_for_environment",
+    "hypernet": "untrained_initial",
+    "gnn": "untrained_initial",
+    "temporal": "untrained_initial"
+  },
+  "initialisation": "Deterministic seeded initialisation at runtime (TwinArchitectureRunner seed, default 0). No weights are stored here and nothing is loaded from models/production.",
+  "not_validated_notes": [
+    "The production tree bank (dt_bank_v2) was trained on the main simulator's 8-zone venue and is NOT used or validated for eh_twin_studio; all six tree channels are reported with mask 0.",
+    "No component has been trained or evaluated on Twin Studio data. Forecasts demonstrate the data path only and carry no claim of predictive skill.",
+    "twin_venue_v1 capacities are unknown (null); the capacity node feature is 0.0 for every zone and listed as unknown_capacity_zones.",
+    "Twin walkable areas (up to 985.65 m2) exceed the main venue's area normalisation (150 m2); untrained weights were never fitted to either range."
+  ]
+}

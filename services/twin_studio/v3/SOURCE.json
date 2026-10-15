@@ -1,0 +1,135 @@
+{
+  "archive": "Event_Horizon_Twin_Studio.zip",
+  "archive_sha256": "3fb226ce73e8ead281a31bb8e17c55173a04bc3a1e6903a797614f24503d9f7a",
+  "archive_bytes": 334449,
+  "engine_model_version": "kinematic-v3",
+  "copied_to": "services/twin_studio/v3/archive/",
+  "note": "Byte-identical extraction of the canonical v3 archive. Never edit files under archive/. The previous archive (sha256 e3d2e8df...) is not a baseline for v3 work.",
+  "known_platform_issue": "reporting.py reads dist/*.js with the platform default encoding; on Windows run with PYTHONUTF8=1.",
+  "files": {
+    "event_horizon_twin_studio/DATA_OUTPUTS.md": {
+      "sha256": "a23d9bb62f11e14a6642c13f59a0776987d5de7e78ba9ade950551e07d2b7c13",
+      "bytes": 4771
+    },
+    "event_horizon_twin_studio/OPEN_OUTPUTS_WINDOWS.bat": {
+      "sha256": "3ebc5fd14797133660fbcb21f395acf62c03ee802cac8c4c1a03ad18dacf8d2e",
+      "bytes": 83
+    },
+    "event_horizon_twin_studio/README.md": {
+      "sha256": "b1d015fe738576678520eb01d7f54170db37ad198cbf8c5c48cca632a250cb81",
+      "bytes": 10990
+    },
+    "event_horizon_twin_studio/START_INFERENCE_WINDOWS.bat": {
+      "sha256": "4369fd40f480a6d39204648a869cc9bd9c5a9a4c24f9a74b93a7bd656f96e06c",
+      "bytes": 93
+    },
+    "event_horizon_twin_studio/START_WINDOWS.bat": {
+      "sha256": "4bd483b69bd019a05f42da522efa9e5eb1172fa744ca4e4ba16a5629bf0c2c21",
+      "bytes": 51
+    },
+    "event_horizon_twin_studio/analysis/01_ideal_flow.csv": {
+      "sha256": "3fab475ef214d0feb728ba896263163dbe2de72643a1dfcc0ca27c81c02c90a7",
+      "bytes": 73198
+    },
+    "event_horizon_twin_studio/analysis/02_custom_disasters.csv": {
+      "sha256": "473072d19068b34e994d4098869529067f5dedc9b0ce982b7a3c577d5ec6a829",
+      "bytes": 75659
+    },
+    "event_horizon_twin_studio/analysis/03_random_collapses.csv": {
+      "sha256": "a413ed99fa5cc50ea7ee75093a2e4e6a6f5dadee36937072dacf53587251d2d7",
+      "bytes": 73793
+    },
+    "event_horizon_twin_studio/analysis/master_report.html": {
+      "sha256": "0cc36f624e02c6cfdee98a7e03acb19f2184dd952cc8683a0ce1c1559fea8555",
+      "bytes": 198621
+    },
+    "event_horizon_twin_studio/analysis/report_data.json": {
+      "sha256": "afdc5c22ad87ebab538aca803f1d38b49ebce464b1e5000425286f10ea644b51",
+      "bytes": 359980
+    },
+    "event_horizon_twin_studio/dist/app.js": {
+      "sha256": "c8786437193a9c0c2b5c7f7a0d8bd5a6832e334312660898479a5ba5573f6494",
+      "bytes": 30847
+    },
+    "event_horizon_twin_studio/dist/bootstrap.js": {
+      "sha256": "dc9c318c700d26f5a9211619b130fa992f358afcf838ad7574e3b7a1a596bd98",
+      "bytes": 993
+    },
+    "event_horizon_twin_studio/dist/density.js": {
+      "sha256": "79006a6fa7f3959030008484a9ef6d290e5ea7071c6b7836a701d0d8b174ac0f",
+      "bytes": 1001
+    },
+    "event_horizon_twin_studio/dist/engine.js": {
+      "sha256": "518f6373041012d2a9013831e0ba116fb74fbd6084f04cd8cabd349605e3c36d",
+      "bytes": 9536
+    },
+    "event_horizon_twin_studio/dist/index.html": {
+      "sha256": "e5779b841b23f4219ff1099f1c1fda43c6edcb391e59eb1c0d365a9443e19fc8",
+      "bytes": 9695
+    },
+    "event_horizon_twin_studio/dist/report.js": {
+      "sha256": "b66ea7a40bc5de97a9f3278598af04ae7c429e911864f90da348e850442eafbd",
+      "bytes": 14665
+    },
+    "event_horizon_twin_studio/dist/style.css": {
+      "sha256": "a488913caee19420d3a8d340b067bd6e7d233f21c80c1951928e0a8b35bf7d3e",
+      "bytes": 9941
+    },
+    "event_horizon_twin_studio/dist/twin3d.js": {
+      "sha256": "ab67fe9a94b585af180834774ca6a4d50b4b53145d32033d905ffd4c6f6f725b",
+      "bytes": 10385
+    },
+    "event_horizon_twin_studio/dist/venue.js": {
+      "sha256": "0168ae7e4b33e296db5a229c43ab052c17626f85ed9d05ac8d571a97bb5feefd",
+      "bytes": 2426
+    },
+    "event_horizon_twin_studio/dist/worker.js": {
+      "sha256": "335cd55e36c5933c841b2205193e0ba30b3a8071b623b133403b22162629c857",
+      "bytes": 256
+    },
+    "event_horizon_twin_studio/docs/original_venue_sketch.png": {
+      "sha256": "64ffe3d3de294122f78ccca098e05c4bd100bdf697a353591e7b4e34a774eb78",
+      "bytes": 191727
+    },
+    "event_horizon_twin_studio/examples/event_horizon_scene.json": {
+      "sha256": "17215abe8e41e519e5f49be659f0cf9cfe5f65804676ea75ed200a58e6c65f45",
+      "bytes": 7746
+    },
+    "event_horizon_twin_studio/lab_server.py": {
+      "sha256": "799407282323b88c63a71b1e17e3e231d6804ccaaaba6c532aecd9a70278898a",
+      "bytes": 8591
+    },
+    "event_horizon_twin_studio/observations.py": {
+      "sha256": "3729d73993d3925e03a2dce63c2dc739b4ff651f68de44a0fce6dd22b9835b06",
+      "bytes": 5415
+    },
+    "event_horizon_twin_studio/reporting.py": {
+      "sha256": "a6cfecf3ae2d7ed3e6a423cc437284b7c866db5f4738351a45ef10141287940d",
+      "bytes": 4374
+    },
+    "event_horizon_twin_studio/simulation.py": {
+      "sha256": "992c98c8dcc4abdcb5a5ceb0916a894a2e3992b94b3ec80767f0076827f45ca9",
+      "bytes": 12565
+    },
+    "event_horizon_twin_studio/test_backend.py": {
+      "sha256": "62ef4e8bcf48e2c842b716aaf1a6ac69f0c3b2503b22d4cf07e7d8f42ba757b1",
+      "bytes": 6715
+    },
+    "event_horizon_twin_studio/test_engine.js": {
+      "sha256": "745c5a68de31b466b79b3be781a77b78d4a77a186a05069cda5a3e9dda714bc7",
+      "bytes": 2728
+    },
+    "event_horizon_twin_studio/test_observations.py": {
+      "sha256": "9fd7b63ef963f7d72e056b959cc0b1be15ddfc844ddb4469560ebb812a9bf723",
+      "bytes": 4364
+    },
+    "event_horizon_twin_studio/test_regressions.js": {
+      "sha256": "8bc826c82fe2e8df63cf00b2ca8806a2069d424c1ed485c8c34f7e2c9a04bd40",
+      "bytes": 3694
+    },
+    "event_horizon_twin_studio/test_ui.js": {
+      "sha256": "e646b059eefccc61833ad591abc743b60ecbb87894fb1ba33321d1bd95f76ccf",
+      "bytes": 6142
+    }
+  }
+}

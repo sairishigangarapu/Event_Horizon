@@ -1,0 +1,32 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "PublishAndReadBackArtifacts",
+      "Effect": "Allow",
+      "Action": ["s3:PutObject", "s3:GetObject", "s3:GetObjectVersion"],
+      "Resource": [
+        "arn:aws:s3:::eh-observations/runs/*",
+        "arn:aws:s3:::eh-reference/runs/*",
+        "arn:aws:s3:::eh-reference/published/*",
+        "arn:aws:s3:::eh-catalog/runs/*"
+      ]
+    },
+    {
+      "Sid": "ListForVersionChecks",
+      "Effect": "Allow",
+      "Action": ["s3:ListBucket", "s3:ListBucketVersions"],
+      "Resource": ["arn:aws:s3:::eh-observations", "arn:aws:s3:::eh-reference", "arn:aws:s3:::eh-catalog"]
+    },
+    {
+      "Sid": "NeverDeleteOrWeakenProtection",
+      "Effect": "Deny",
+      "Action": [
+        "s3:DeleteObject", "s3:DeleteObjectVersion", "s3:BypassGovernanceRetention", "s3:PutObjectRetention",
+        "s3:PutObjectLegalHold", "s3:DeleteBucket", "s3:PutBucketPolicy", "s3:DeleteBucketPolicy",
+        "s3:PutBucketVersioning", "s3:PutBucketObjectLockConfiguration", "s3:PutLifecycleConfiguration"
+      ],
+      "Resource": ["arn:aws:s3:::eh-*", "arn:aws:s3:::eh-*/*"]
+    }
+  ]
+}

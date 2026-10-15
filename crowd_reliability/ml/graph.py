@@ -43,11 +43,22 @@ class SpatialGraphBuilder:
         self.num_nodes = len(self.zone_ids)
 
         # Static node descriptors: zone-type one-hot (5) + capacity + area + exit flag = 8
+        # An explicitly unknown capacity (capacity_definition None) is only accepted when the zone
+        # declares capacity_status "unknown"; it then contributes 0.0 and is listed in
+        # unknown_capacity_zones. It is never replaced by an invented capacity value.
         node_static = []
+        self.unknown_capacity_zones: List[str] = []
         for z in zones:
             onehot = [1.0 if z.get("zone_type") == t else 0.0 for t in ZONE_TYPES]
+            if "capacity_definition" in z and z["capacity_definition"] is None:
+                if z.get("capacity_status") != "unknown":
+                    raise ValueError(f"Zone {z['zone_id']} has no capacity; declare capacity_status 'unknown' explicitly")
+                self.unknown_capacity_zones.append(z["zone_id"])
+                capacity_norm = 0.0
+            else:
+                capacity_norm = float(z.get("capacity_definition", 100.0)) / 400.0
             node_static.append(onehot + [
-                float(z.get("capacity_definition", 100.0)) / 400.0,
+                capacity_norm,
                 float(z.get("area_m2", 50.0)) / 150.0,
                 1.0 if z.get("has_exit", False) else 0.0,
             ])

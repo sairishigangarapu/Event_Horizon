@@ -3,3 +3,9 @@
 Dockerfile text eol=lf
 *.dockerignore text eol=lf
 deploy/hf_space/nginx.conf text eol=lf
+# Canonical Twin Studio v3 archive copy: keep bytes exactly as in the ZIP (no EOL conversion).
+services/twin_studio/v3/archive/** -text
+# Phase 1-7 provenance copies are hash-checked by tests: keep their bytes exactly (no EOL conversion).
+services/twin_studio/studio/** -text
+services/twin_studio/engine/** -text
+services/twin_studio/venue/** -text

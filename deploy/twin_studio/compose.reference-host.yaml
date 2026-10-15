@@ -1,0 +1,11 @@
+# EXPLICIT OPT-IN: exposes the reference API to the local host for an offline evaluator.
+#   docker compose -f deploy/twin_studio/compose.yaml -f deploy/twin_studio/compose.reference-host.yaml up -d
+# Binds 127.0.0.1 only; every route except /health still requires the evaluator bearer token.
+# Never combine this with a non-loopback address.
+services:
+  reference-api:
+    networks: [eh_ref_storage, eh_reference, eh_reference_host]
+    ports: ["127.0.0.1:${EH_REF_API_PORT:-8082}:8000"]
+
+networks:
+  eh_reference_host: {}

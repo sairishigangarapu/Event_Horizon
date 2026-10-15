@@ -1,0 +1,21 @@
+{
+  "archive": "Event_Horizon_Twin_Studio.zip",
+  "archive_sha256": "e3d2e8df8bae997fee741d54923a50999ada261e1fcfff6320cd71649213f97d",
+  "original": {
+    "note": "Byte-identical copies of the archive engines, kept for provenance and no-gate regression tests. Never edit.",
+    "python": {"archive_entry": "event_horizon_twin_studio/simulation.py", "file": "original/simulation.py",
+               "sha256": "ce39174c0881e687829f81afe07a6f769d04ed9ff0a06cf975d71cf263aa8c03"},
+    "javascript": {"archive_entry": "event_horizon_twin_studio/dist/engine.js", "file": "original/engine.js",
+                   "sha256": "866882f1836545cf3011d63cc6518710e2f412f9782a5d29e714fe9713e48b67"}
+  },
+  "modified": {
+    "phase": "Phase 2 (gate_closure incident, completion classification, spawn/completion/gate logs)",
+    "python": {"file": "simulation.py", "derived_from": "original/simulation.py",
+               "sha256": "9798781f291e3057472023281b0f21ac8216b908d4b3019ae61a8643731b4e44"},
+    "javascript": {"file": "engine.js", "derived_from": "original/engine.js",
+                   "sha256": "5ec10f13166847ef97a779f8eebe30aa1b29b2cabcbbe33e9305c06ae22cf424"},
+    "parity": "tests/test_twin_studio_phase2.py runs both engines on identical configurations and compares every output field",
+    "unchanged_behaviour": "With no gates and no gate_closure incidents every original output field is identical to the original engines (regression-tested)"
+  },
+  "not_modified": "The Twin Studio UI engine (archive dist/engine.js used by the browser app) is not part of this subsystem and is unchanged."
+}

@@ -1,0 +1,6 @@
+# Generated Twin v3 Monte Carlo runs, samples and replay evaluations.
+# Large and reproducible from services/twin_studio/v3 (scenarios.py, dataset.py); manifests stay tracked.
+mc/*/runs/
+mc/*/samples/*.npz
+evaluations/*/
+runs/

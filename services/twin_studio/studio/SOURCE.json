@@ -1,0 +1,71 @@
+{
+  "archive": "Event_Horizon_Twin_Studio.zip",
+  "archive_sha256": "e3d2e8df8bae997fee741d54923a50999ada261e1fcfff6320cd71649213f97d",
+  "files": {
+    "event_horizon_twin_studio/README.md": {
+      "bytes": 7705,
+      "sha256": "17f8745432aa59b4c69e5e2bfaadc0f6fad14e4e617164f9fb46d744ad7f7a50"
+    },
+    "event_horizon_twin_studio/START_WINDOWS.bat": {
+      "bytes": 51,
+      "sha256": "4bd483b69bd019a05f42da522efa9e5eb1172fa744ca4e4ba16a5629bf0c2c21"
+    },
+    "event_horizon_twin_studio/dist/app.js": {
+      "bytes": 23227,
+      "sha256": "58288d30f21945c5d368da73ec640ad34d0eefb3b3d6585df176afafa89a3e00"
+    },
+    "event_horizon_twin_studio/dist/bootstrap.js": {
+      "bytes": 993,
+      "sha256": "dc9c318c700d26f5a9211619b130fa992f358afcf838ad7574e3b7a1a596bd98"
+    },
+    "event_horizon_twin_studio/dist/engine.js": {
+      "bytes": 6343,
+      "sha256": "866882f1836545cf3011d63cc6518710e2f412f9782a5d29e714fe9713e48b67"
+    },
+    "event_horizon_twin_studio/dist/index.html": {
+      "bytes": 8502,
+      "sha256": "1780cb00f0e10c39bbe4bb21d3bc7d89c311482dd87011e95f72765e45aeacc6"
+    },
+    "event_horizon_twin_studio/dist/style.css": {
+      "bytes": 9149,
+      "sha256": "c39a89b3e0857fbc217932a5e0bac119e68c2e03cc34c495f02794e769a0b963"
+    },
+    "event_horizon_twin_studio/dist/twin3d.js": {
+      "bytes": 10030,
+      "sha256": "07865a7897c0b45bf99dc7b20542162d2729f78713d5a3b1f8c74db15ff24338"
+    },
+    "event_horizon_twin_studio/dist/venue.js": {
+      "bytes": 2426,
+      "sha256": "0168ae7e4b33e296db5a229c43ab052c17626f85ed9d05ac8d571a97bb5feefd"
+    },
+    "event_horizon_twin_studio/dist/worker.js": {
+      "bytes": 256,
+      "sha256": "335cd55e36c5933c841b2205193e0ba30b3a8071b623b133403b22162629c857"
+    },
+    "event_horizon_twin_studio/docs/original_venue_sketch.png": {
+      "bytes": 191727,
+      "sha256": "64ffe3d3de294122f78ccca098e05c4bd100bdf697a353591e7b4e34a774eb78"
+    },
+    "event_horizon_twin_studio/lab_server.py": {
+      "bytes": 5681,
+      "sha256": "ce452c09f17d6c3e36934f7543236043bc0230ece102bb20d834cbdda14b5500"
+    },
+    "event_horizon_twin_studio/simulation.py": {
+      "bytes": 8974,
+      "sha256": "ce39174c0881e687829f81afe07a6f769d04ed9ff0a06cf975d71cf263aa8c03"
+    },
+    "event_horizon_twin_studio/test_backend.py": {
+      "bytes": 4666,
+      "sha256": "dd061b40d2a785f9457eaa15896ce3aac9287486e4a18e463824c717cb426100"
+    },
+    "event_horizon_twin_studio/test_engine.js": {
+      "bytes": 2728,
+      "sha256": "745c5a68de31b466b79b3be781a77b78d4a77a186a05069cda5a3e9dda714bc7"
+    },
+    "event_horizon_twin_studio/test_ui.js": {
+      "bytes": 5218,
+      "sha256": "c9afdbf52d4d7a67bbd0c37dee3a1eacf266a46e9b4cdc8cea4dae4ee30157dc"
+    }
+  },
+  "note": "Byte-identical extraction of the complete archive (UI, lab server, original engines, archive tests). Never edit files under event_horizon_twin_studio/; verify with tests/test_twin_studio_studio_app.py."
+}

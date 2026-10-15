@@ -1,0 +1,493 @@
+{
+  "map_version": "twin_venue_v1",
+  "environment_id": "eh_twin_studio",
+  "source": {
+    "archive": "Event_Horizon_Twin_Studio.zip",
+    "archive_sha256": "e3d2e8df8bae997fee741d54923a50999ada261e1fcfff6320cd71649213f97d",
+    "venue_js_sha256": "0168ae7e4b33e296db5a229c43ab052c17626f85ed9d05ac8d571a97bb5feefd",
+    "derived_from": "dist/venue.js `areas` rectangles; connections derived from shared rectangle boundaries and gate overlaps"
+  },
+  "coordinate_system": {
+    "units": "canvas_units",
+    "scale_m_per_unit": 0.1,
+    "origin": "top-left",
+    "x_increases": "right",
+    "y_increases": "down",
+    "canvas_units": {
+      "width": 1000,
+      "height": 700
+    },
+    "containment": "half-open rectangles [x, x+w) x [y, y+d); gates take priority over host areas; obstacles are non-walkable"
+  },
+  "zones": [
+    {
+      "zone_id": "T_ENTRANCE",
+      "name": "Main entrance",
+      "zone_type": "entrance",
+      "twin_area_type": "entrance",
+      "geometry": {
+        "type": "Rectangle",
+        "units": "canvas_units",
+        "x": 310,
+        "y": 55,
+        "w": 135,
+        "d": 145
+      },
+      "rectangle_area_m2": 195.75,
+      "effective_walkable_area_m2": 189.15,
+      "area_removed": [
+        {
+          "by": "T_GATE_NW",
+          "reason": "gate_priority",
+          "area_m2": 6.6
+        }
+      ],
+      "has_exit": false,
+      "capacity": null,
+      "capacity_units": "persons",
+      "capacity_definition": "Not provided by the Twin Studio source (venue.js defines no capacity); to be set by Person 1 before Phase 5.",
+      "map_version": "twin_venue_v1"
+    },
+    {
+      "zone_id": "T_CONNECTOR",
+      "name": "Entry connection",
+      "zone_type": "corridor",
+      "twin_area_type": "connector",
+      "geometry": {
+        "type": "Rectangle",
+        "units": "canvas_units",
+        "x": 445,
+        "y": 125,
+        "w": 80,
+        "d": 75
+      },
+      "rectangle_area_m2": 60.0,
+      "effective_walkable_area_m2": 60.0,
+      "area_removed": [],
+      "has_exit": false,
+      "capacity": null,
+      "capacity_units": "persons",
+      "capacity_definition": "Not provided by the Twin Studio source (venue.js defines no capacity); to be set by Person 1 before Phase 5.",
+      "map_version": "twin_venue_v1"
+    },
+    {
+      "zone_id": "T_WALK_N",
+      "name": "North walkway",
+      "zone_type": "corridor",
+      "twin_area_type": "walkway",
+      "geometry": {
+        "type": "Rectangle",
+        "units": "canvas_units",
+        "x": 190,
+        "y": 200,
+        "w": 545,
+        "d": 90
+      },
+      "rectangle_area_m2": 490.5,
+      "effective_walkable_area_m2": 490.5,
+      "area_removed": [],
+      "has_exit": false,
+      "capacity": null,
+      "capacity_units": "persons",
+      "capacity_definition": "Not provided by the Twin Studio source (venue.js defines no capacity); to be set by Person 1 before Phase 5.",
+      "map_version": "twin_venue_v1"
+    },
+    {
+      "zone_id": "T_WALK_W",
+      "name": "West walkway",
+      "zone_type": "corridor",
+      "twin_area_type": "walkway",
+      "geometry": {
+        "type": "Rectangle",
+        "units": "canvas_units",
+        "x": 190,
+        "y": 290,
+        "w": 90,
+        "d": 360
+      },
+      "rectangle_area_m2": 324.0,
+      "effective_walkable_area_m2": 321.0,
+      "area_removed": [
+        {
+          "by": "T_GATE_SW",
+          "reason": "gate_priority",
+          "area_m2": 3.0
+        }
+      ],
+      "has_exit": false,
+      "capacity": null,
+      "capacity_units": "persons",
+      "capacity_definition": "Not provided by the Twin Studio source (venue.js defines no capacity); to be set by Person 1 before Phase 5.",
+      "map_version": "twin_venue_v1"
+    },
+    {
+      "zone_id": "T_WALK_S",
+      "name": "South walkway",
+      "zone_type": "corridor",
+      "twin_area_type": "walkway",
+      "geometry": {
+        "type": "Rectangle",
+        "units": "canvas_units",
+        "x": 280,
+        "y": 575,
+        "w": 455,
+        "d": 75
+      },
+      "rectangle_area_m2": 341.25,
+      "effective_walkable_area_m2": 341.25,
+      "area_removed": [],
+      "has_exit": false,
+      "capacity": null,
+      "capacity_units": "persons",
+      "capacity_definition": "Not provided by the Twin Studio source (venue.js defines no capacity); to be set by Person 1 before Phase 5.",
+      "map_version": "twin_venue_v1"
+    },
+    {
+      "zone_id": "T_WALK_E",
+      "name": "East walkway",
+      "zone_type": "corridor",
+      "twin_area_type": "walkway",
+      "geometry": {
+        "type": "Rectangle",
+        "units": "canvas_units",
+        "x": 645,
+        "y": 290,
+        "w": 90,
+        "d": 285
+      },
+      "rectangle_area_m2": 256.5,
+      "effective_walkable_area_m2": 256.5,
+      "area_removed": [],
+      "has_exit": false,
+      "capacity": null,
+      "capacity_units": "persons",
+      "capacity_definition": "Not provided by the Twin Studio source (venue.js defines no capacity); to be set by Person 1 before Phase 5.",
+      "map_version": "twin_venue_v1"
+    },
+    {
+      "zone_id": "T_COURTYARD",
+      "name": "Vendor courtyard",
+      "zone_type": "assembly",
+      "twin_area_type": "courtyard",
+      "geometry": {
+        "type": "Rectangle",
+        "units": "canvas_units",
+        "x": 280,
+        "y": 290,
+        "w": 365,
+        "d": 285
+      },
+      "rectangle_area_m2": 1040.25,
+      "effective_walkable_area_m2": 985.65,
+      "area_removed": [
+        {
+          "by": "O_POND",
+          "reason": "non_walkable_obstacle",
+          "area_m2": 54.6
+        }
+      ],
+      "has_exit": false,
+      "capacity": null,
+      "capacity_units": "persons",
+      "capacity_definition": "Not provided by the Twin Studio source (venue.js defines no capacity); to be set by Person 1 before Phase 5.",
+      "map_version": "twin_venue_v1"
+    },
+    {
+      "zone_id": "T_ANNEX",
+      "name": "Eastern annex",
+      "zone_type": "corridor",
+      "twin_area_type": "annex",
+      "geometry": {
+        "type": "Rectangle",
+        "units": "canvas_units",
+        "x": 735,
+        "y": 435,
+        "w": 230,
+        "d": 215
+      },
+      "rectangle_area_m2": 494.5,
+      "effective_walkable_area_m2": 491.0,
+      "area_removed": [
+        {
+          "by": "T_GATE_E",
+          "reason": "gate_priority",
+          "area_m2": 3.5
+        }
+      ],
+      "has_exit": false,
+      "capacity": null,
+      "capacity_units": "persons",
+      "capacity_definition": "Not provided by the Twin Studio source (venue.js defines no capacity); to be set by Person 1 before Phase 5.",
+      "map_version": "twin_venue_v1"
+    },
+    {
+      "zone_id": "T_GATE_NW",
+      "name": "Exit · north-west",
+      "zone_type": "exit",
+      "twin_area_type": "gate",
+      "geometry": {
+        "type": "Rectangle",
+        "units": "canvas_units",
+        "x": 305,
+        "y": 55,
+        "w": 60,
+        "d": 12
+      },
+      "rectangle_area_m2": 7.2,
+      "effective_walkable_area_m2": 7.2,
+      "area_removed": [],
+      "has_exit": true,
+      "capacity": null,
+      "capacity_units": "persons",
+      "capacity_definition": "Not provided by the Twin Studio source (venue.js defines no capacity); to be set by Person 1 before Phase 5.",
+      "map_version": "twin_venue_v1"
+    },
+    {
+      "zone_id": "T_GATE_SW",
+      "name": "Exit · south-west",
+      "zone_type": "exit",
+      "twin_area_type": "gate",
+      "geometry": {
+        "type": "Rectangle",
+        "units": "canvas_units",
+        "x": 180,
+        "y": 590,
+        "w": 16,
+        "d": 50
+      },
+      "rectangle_area_m2": 8.0,
+      "effective_walkable_area_m2": 8.0,
+      "area_removed": [],
+      "has_exit": true,
+      "capacity": null,
+      "capacity_units": "persons",
+      "capacity_definition": "Not provided by the Twin Studio source (venue.js defines no capacity); to be set by Person 1 before Phase 5.",
+      "map_version": "twin_venue_v1"
+    },
+    {
+      "zone_id": "T_GATE_E",
+      "name": "Exit · east",
+      "zone_type": "exit",
+      "twin_area_type": "gate",
+      "geometry": {
+        "type": "Rectangle",
+        "units": "canvas_units",
+        "x": 958,
+        "y": 555,
+        "w": 14,
+        "d": 50
+      },
+      "rectangle_area_m2": 7.0,
+      "effective_walkable_area_m2": 7.0,
+      "area_removed": [],
+      "has_exit": true,
+      "capacity": null,
+      "capacity_units": "persons",
+      "capacity_definition": "Not provided by the Twin Studio source (venue.js defines no capacity); to be set by Person 1 before Phase 5.",
+      "map_version": "twin_venue_v1"
+    }
+  ],
+  "obstacles": [
+    {
+      "obstacle_id": "O_POND",
+      "name": "Pond",
+      "twin_area_type": "pond",
+      "geometry": {
+        "type": "Rectangle",
+        "units": "canvas_units",
+        "x": 415,
+        "y": 410,
+        "w": 78,
+        "d": 70
+      },
+      "walkable": false
+    }
+  ],
+  "connections": [
+    {
+      "edge_id": "E_ENTRANCE__CONNECTOR",
+      "from_zone": "T_ENTRANCE",
+      "to_zone": "T_CONNECTOR",
+      "direction": "bidirectional",
+      "physically_traversable": true,
+      "width_m": 7.5,
+      "distance_m": 11.3054,
+      "derivation": "shared_boundary",
+      "map_version": "twin_venue_v1"
+    },
+    {
+      "edge_id": "E_ENTRANCE__WALK_N",
+      "from_zone": "T_ENTRANCE",
+      "to_zone": "T_WALK_N",
+      "direction": "bidirectional",
+      "physically_traversable": true,
+      "width_m": 13.5,
+      "distance_m": 14.5022,
+      "derivation": "shared_boundary",
+      "map_version": "twin_venue_v1"
+    },
+    {
+      "edge_id": "E_CONNECTOR__WALK_N",
+      "from_zone": "T_CONNECTOR",
+      "to_zone": "T_WALK_N",
+      "direction": "bidirectional",
+      "physically_traversable": true,
+      "width_m": 8.0,
+      "distance_m": 8.5513,
+      "derivation": "shared_boundary",
+      "map_version": "twin_venue_v1"
+    },
+    {
+      "edge_id": "E_WALK_N__WALK_W",
+      "from_zone": "T_WALK_N",
+      "to_zone": "T_WALK_W",
+      "direction": "bidirectional",
+      "physically_traversable": true,
+      "width_m": 9.0,
+      "distance_m": 31.9971,
+      "derivation": "shared_boundary",
+      "map_version": "twin_venue_v1"
+    },
+    {
+      "edge_id": "E_WALK_N__WALK_E",
+      "from_zone": "T_WALK_N",
+      "to_zone": "T_WALK_E",
+      "direction": "bidirectional",
+      "physically_traversable": true,
+      "width_m": 9.0,
+      "distance_m": 29.4809,
+      "derivation": "shared_boundary",
+      "map_version": "twin_venue_v1"
+    },
+    {
+      "edge_id": "E_WALK_N__COURTYARD",
+      "from_zone": "T_WALK_N",
+      "to_zone": "T_COURTYARD",
+      "direction": "bidirectional",
+      "physically_traversable": true,
+      "width_m": 36.5,
+      "distance_m": 18.75,
+      "derivation": "shared_boundary",
+      "map_version": "twin_venue_v1"
+    },
+    {
+      "edge_id": "E_WALK_W__WALK_S",
+      "from_zone": "T_WALK_W",
+      "to_zone": "T_WALK_S",
+      "direction": "bidirectional",
+      "physically_traversable": true,
+      "width_m": 7.5,
+      "distance_m": 30.751,
+      "derivation": "shared_boundary",
+      "map_version": "twin_venue_v1"
+    },
+    {
+      "edge_id": "E_WALK_W__COURTYARD",
+      "from_zone": "T_WALK_W",
+      "to_zone": "T_COURTYARD",
+      "direction": "bidirectional",
+      "physically_traversable": true,
+      "width_m": 28.5,
+      "distance_m": 23.057,
+      "derivation": "shared_boundary",
+      "map_version": "twin_venue_v1"
+    },
+    {
+      "edge_id": "E_WALK_S__WALK_E",
+      "from_zone": "T_WALK_S",
+      "to_zone": "T_WALK_E",
+      "direction": "bidirectional",
+      "physically_traversable": true,
+      "width_m": 9.0,
+      "distance_m": 25.6332,
+      "derivation": "shared_boundary",
+      "map_version": "twin_venue_v1"
+    },
+    {
+      "edge_id": "E_WALK_S__COURTYARD",
+      "from_zone": "T_WALK_S",
+      "to_zone": "T_COURTYARD",
+      "direction": "bidirectional",
+      "physically_traversable": true,
+      "width_m": 36.5,
+      "distance_m": 18.554,
+      "derivation": "shared_boundary",
+      "map_version": "twin_venue_v1"
+    },
+    {
+      "edge_id": "E_WALK_S__ANNEX",
+      "from_zone": "T_WALK_S",
+      "to_zone": "T_ANNEX",
+      "direction": "bidirectional",
+      "physically_traversable": true,
+      "width_m": 7.5,
+      "distance_m": 34.958,
+      "derivation": "shared_boundary",
+      "map_version": "twin_venue_v1"
+    },
+    {
+      "edge_id": "E_WALK_E__COURTYARD",
+      "from_zone": "T_WALK_E",
+      "to_zone": "T_COURTYARD",
+      "direction": "bidirectional",
+      "physically_traversable": true,
+      "width_m": 28.5,
+      "distance_m": 22.75,
+      "derivation": "shared_boundary",
+      "map_version": "twin_venue_v1"
+    },
+    {
+      "edge_id": "E_WALK_E__ANNEX",
+      "from_zone": "T_WALK_E",
+      "to_zone": "T_ANNEX",
+      "direction": "bidirectional",
+      "physically_traversable": true,
+      "width_m": 14.0,
+      "distance_m": 19.4165,
+      "derivation": "shared_boundary",
+      "map_version": "twin_venue_v1"
+    },
+    {
+      "edge_id": "E_ENTRANCE__GATE_NW",
+      "from_zone": "T_ENTRANCE",
+      "to_zone": "T_GATE_NW",
+      "direction": "bidirectional",
+      "physically_traversable": true,
+      "width_m": 5.5,
+      "distance_m": 7.8921,
+      "derivation": "gate_attachment",
+      "map_version": "twin_venue_v1"
+    },
+    {
+      "edge_id": "E_WALK_W__GATE_SW",
+      "from_zone": "T_WALK_W",
+      "to_zone": "T_GATE_SW",
+      "direction": "bidirectional",
+      "physically_traversable": true,
+      "width_m": 5.0,
+      "distance_m": 15.2427,
+      "derivation": "gate_attachment",
+      "map_version": "twin_venue_v1"
+    },
+    {
+      "edge_id": "E_ANNEX__GATE_E",
+      "from_zone": "T_ANNEX",
+      "to_zone": "T_GATE_E",
+      "direction": "bidirectional",
+      "physically_traversable": true,
+      "width_m": 5.0,
+      "distance_m": 12.096,
+      "derivation": "gate_attachment",
+      "map_version": "twin_venue_v1"
+    }
+  ],
+  "assumptions_to_verify": [
+    "All dimensions come from the schematic venue.js sketch reconstruction; nothing is surveyed.",
+    "The vendor courtyard is treated as walkable (approved decision); its decorative stalls are not modelled as obstacles.",
+    "Only the pond is a non-walkable obstacle.",
+    "Gate zones overlap their host areas; overlap area belongs to the gate.",
+    "Connection width_m is the shared boundary length; distance_m is the rectangle-centroid distance.",
+    "Twin Studio defines no capacities; capacity is null until Person 1 sets it.",
+    "Route completion is not a venue exit; only completions inside a gate zone may be counted as exits (Phase 2)."
+  ]
+}

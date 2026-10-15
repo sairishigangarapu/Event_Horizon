@@ -1,0 +1,27 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ReadReferenceArtifactsAndCatalogMarkers",
+      "Effect": "Allow",
+      "Action": ["s3:GetObject", "s3:GetObjectVersion"],
+      "Resource": [
+        "arn:aws:s3:::eh-reference/runs/*",
+        "arn:aws:s3:::eh-reference/published/*",
+        "arn:aws:s3:::eh-catalog/runs/*"
+      ]
+    },
+    {
+      "Sid": "VersionChecksOnly",
+      "Effect": "Allow",
+      "Action": ["s3:ListBucket", "s3:ListBucketVersions"],
+      "Resource": ["arn:aws:s3:::eh-reference", "arn:aws:s3:::eh-catalog"]
+    },
+    {
+      "Sid": "NoObservationBucketAccess",
+      "Effect": "Deny",
+      "Action": ["s3:*"],
+      "Resource": ["arn:aws:s3:::eh-observations", "arn:aws:s3:::eh-observations/*"]
+    }
+  ]
+}

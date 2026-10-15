@@ -1,0 +1,64 @@
+{
+  "environment_id": "eh_twin_studio",
+  "map_version": "twin_venue_v1",
+  "canonical_archive_sha256": "3fb226ce73e8ead281a31bb8e17c55173a04bc3a1e6903a797614f24503d9f7a",
+  "engine_model_version": "kinematic-v3",
+  "pipeline_version": "eh-v3-pipeline-1",
+  "dataset": "mc_v1_n16_seed2026",
+  "components": {
+    "tree_bank": {
+      "version": "dt_bank_v3_topo_1",
+      "feature_schema": "eh-v3-topo-features-1",
+      "status": "trained_heldout_evaluated",
+      "validated_channels": [
+        "density",
+        "speed",
+        "inflow",
+        "outflow",
+        "exit_open"
+      ],
+      "artifact": "models/environments/eh_twin_studio/v3/trees/dt_bank_v3_topo_1__mc_v1_n16_seed2026/tree_bank.joblib",
+      "sha256": "11cbfcc2d0a84db993b471c87fe27290ef0d16f34242c4187d6ec695ecaa5e35",
+      "sklearn_version": "1.7.2"
+    },
+    "hypernet": {
+      "version": "hypernet_v2",
+      "status": "trained_not_validated",
+      "sha256": "5ec129ab39f052ebc0c2a7de637bc509f1c4c2131286cdd28053c403e63fae72",
+      "pair_id": "fb7b9fa7ca7247f7a0322e0224eee1be"
+    },
+    "gnn": {
+      "version": "gnn_edge_v2",
+      "status": "trained_not_validated",
+      "sha256": "582a9bf36c07c8245522dcddbf17968be7ef79950ee3460d41b0c653eefb72e1",
+      "pair_id": "fb7b9fa7ca7247f7a0322e0224eee1be"
+    },
+    "temporal": {
+      "version": "gru_forecaster_v3_twin",
+      "status": "trained_not_validated",
+      "sha256": "4587d51ea96ea6030a180ea1e252bcc4b2174d533bd6d629bedbb8cf05c64a14",
+      "u_schema": "eh-v3-u-1",
+      "horizons_s": [
+        30,
+        60
+      ],
+      "validation_wins_30s": [
+        "inflow",
+        "outflow"
+      ]
+    },
+    "staleness_policy": {
+      "version": "eh-v3-staleness-1",
+      "age_multiplier": 1.0,
+      "status": "calibrated_on_validation_reported_on_test"
+    },
+    "routing": {
+      "version": "eh-v3-routing-1",
+      "status": "rule_based_decision_support_not_validated_against_outcomes"
+    }
+  },
+  "not_implemented": [
+    "hypernetwork+GNN feedback loop (candidate copy, validation gate, atomic promotion)",
+    "Monte Carlo hyperparameter selection for the hypernetwork/GNN (out of policy, ARCHITECTURE section 10)"
+  ]
+}

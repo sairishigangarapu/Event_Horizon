@@ -1,0 +1,633 @@
+{
+  "feature_schema": [
+    "own_value_density",
+    "own_age_density",
+    "own_present_density",
+    "own_fresh_density",
+    "own_value_speed",
+    "own_age_speed",
+    "own_present_speed",
+    "own_fresh_speed",
+    "own_value_inflow",
+    "own_age_inflow",
+    "own_present_inflow",
+    "own_fresh_inflow",
+    "own_value_outflow",
+    "own_age_outflow",
+    "own_present_outflow",
+    "own_fresh_outflow",
+    "own_value_queue_length",
+    "own_age_queue_length",
+    "own_present_queue_length",
+    "own_fresh_queue_length",
+    "own_value_exit_open",
+    "own_age_exit_open",
+    "own_present_exit_open",
+    "own_fresh_exit_open",
+    "nb_mean_density",
+    "nb_frac_density",
+    "nb_min_age_density",
+    "nb_gap_density",
+    "nb_mean_speed",
+    "nb_frac_speed",
+    "nb_min_age_speed",
+    "nb_gap_speed",
+    "nb_mean_inflow",
+    "nb_frac_inflow",
+    "nb_min_age_inflow",
+    "nb_gap_inflow",
+    "nb_mean_outflow",
+    "nb_frac_outflow",
+    "nb_min_age_outflow",
+    "nb_gap_outflow",
+    "nb_mean_queue_length",
+    "nb_frac_queue_length",
+    "nb_min_age_queue_length",
+    "nb_gap_queue_length",
+    "nb_mean_exit_open",
+    "nb_frac_exit_open",
+    "nb_min_age_exit_open",
+    "nb_gap_exit_open",
+    "degree",
+    "connected_width_m",
+    "mean_connection_distance_m",
+    "area_m2",
+    "type_entrance",
+    "type_corridor",
+    "type_assembly",
+    "type_stairway",
+    "type_exit",
+    "exit_applicable"
+  ],
+  "variables": [
+    "density",
+    "speed",
+    "inflow",
+    "outflow",
+    "queue_length",
+    "exit_open"
+  ],
+  "sample_seconds": 5,
+  "scenarios": [
+    {
+      "scenario_id": "mc_normal_000",
+      "regime": "normal",
+      "split": "train",
+      "instants": 67,
+      "sha256": "1fd6faf0ccfc1ea0019349b55c6eb91e7273ce780c0c71a74dad2debfc1e7994"
+    },
+    {
+      "scenario_id": "mc_normal_001",
+      "regime": "normal",
+      "split": "train",
+      "instants": 49,
+      "sha256": "387174780c80542eaebc2cfd3bfdd190a9e3e014cfd367fe76d7157f885799c1"
+    },
+    {
+      "scenario_id": "mc_normal_002",
+      "regime": "normal",
+      "split": "train",
+      "instants": 61,
+      "sha256": "abeaffef14f66084eae317d5c62067e4a152059a7262bcdacc3e63c84384adc2"
+    },
+    {
+      "scenario_id": "mc_normal_003",
+      "regime": "normal",
+      "split": "train",
+      "instants": 49,
+      "sha256": "1d45f643a0e9c4762b666d377b7321a2cfeaa0c2fee8ab29017e277836614823"
+    },
+    {
+      "scenario_id": "mc_normal_004",
+      "regime": "normal",
+      "split": "train",
+      "instants": 49,
+      "sha256": "12a3a11750116300d11640193acc53ea94771d32d581420c5305bbb01de27551"
+    },
+    {
+      "scenario_id": "mc_normal_005",
+      "regime": "normal",
+      "split": "train",
+      "instants": 61,
+      "sha256": "f53e30d40570409bd7667b14741bfb88161f5f239ff76220e8322ddb1be07bea"
+    },
+    {
+      "scenario_id": "mc_normal_006",
+      "regime": "normal",
+      "split": "train",
+      "instants": 61,
+      "sha256": "f4db6e1f70982707828313e350ccc9cc95ffe22ed18b3511db6d19b6a4a98b5d"
+    },
+    {
+      "scenario_id": "mc_normal_007",
+      "regime": "normal",
+      "split": "train",
+      "instants": 61,
+      "sha256": "532b99143511d25c2200a4b30a814654b4c7b85fdd1edbca707c5342001b470e"
+    },
+    {
+      "scenario_id": "mc_normal_008",
+      "regime": "normal",
+      "split": "train",
+      "instants": 49,
+      "sha256": "3a39d375e6ee74529a438819f2200376b4e4e09d2884084741426561581c7d99"
+    },
+    {
+      "scenario_id": "mc_normal_009",
+      "regime": "normal",
+      "split": "val",
+      "instants": 73,
+      "sha256": "a4630084adf9793fb2dce63f24663572aedd59d6da14453b5ce16477bc9a8cba"
+    },
+    {
+      "scenario_id": "mc_normal_010",
+      "regime": "normal",
+      "split": "val",
+      "instants": 73,
+      "sha256": "e21ba820b9a2eeffc82ba08c84eb012a9fbb2d610b144c5e6bfe11254bef97e8"
+    },
+    {
+      "scenario_id": "mc_normal_011",
+      "regime": "normal",
+      "split": "val",
+      "instants": 55,
+      "sha256": "ac418ab00f19b36755422ac3cdc21d70c7d962359a9bfd048eac6071c4efd24a"
+    },
+    {
+      "scenario_id": "mc_normal_012",
+      "regime": "normal",
+      "split": "test",
+      "instants": 49,
+      "sha256": "7881032756171958ba4acce8381a8dfb4f98f770156e98e76eafe7057f9399b3"
+    },
+    {
+      "scenario_id": "mc_normal_013",
+      "regime": "normal",
+      "split": "test",
+      "instants": 49,
+      "sha256": "29a02310909ba9e29740107e82738f33e1a78197288c7ba89d4682fc336b071f"
+    },
+    {
+      "scenario_id": "mc_normal_014",
+      "regime": "normal",
+      "split": "test",
+      "instants": 55,
+      "sha256": "ba126958b5fea9098f45aa83c06c40f05fe4bb171ce457e3295bc1791be9ea90"
+    },
+    {
+      "scenario_id": "mc_normal_015",
+      "regime": "normal",
+      "split": "test",
+      "instants": 73,
+      "sha256": "8bbdfe50cedf2b6f7b4d2db60c361a1ddf214afce7d32f6c43ab4d5a5484690e"
+    },
+    {
+      "scenario_id": "mc_surge_000",
+      "regime": "surge",
+      "split": "train",
+      "instants": 73,
+      "sha256": "6cd0b2a692956aefed914e8652af5e7fe473fa67451e1ca1a2aa076ac708b361"
+    },
+    {
+      "scenario_id": "mc_surge_001",
+      "regime": "surge",
+      "split": "train",
+      "instants": 73,
+      "sha256": "5dd08ed473405b96df700fb3fb667f664dfe27dd4f21fdf257bf2a5b9452be30"
+    },
+    {
+      "scenario_id": "mc_surge_002",
+      "regime": "surge",
+      "split": "train",
+      "instants": 49,
+      "sha256": "6dbb393798086c5ba8d946f4925202ff9bfc9ef5865911f9b8885dcc25a7614b"
+    },
+    {
+      "scenario_id": "mc_surge_003",
+      "regime": "surge",
+      "split": "train",
+      "instants": 67,
+      "sha256": "a71e018c7ed17893c6d9df24743107cd4866597197f783c3f58b759e977baee2"
+    },
+    {
+      "scenario_id": "mc_surge_004",
+      "regime": "surge",
+      "split": "train",
+      "instants": 49,
+      "sha256": "fa1b616a94b11b2c6985c531939179d56e7cd5aaa12675c6d6b0d4b441f1532e"
+    },
+    {
+      "scenario_id": "mc_surge_005",
+      "regime": "surge",
+      "split": "train",
+      "instants": 55,
+      "sha256": "58e04504f5e788e4d52f65752a47af08e6602d78b748225aa018c78582aa61ba"
+    },
+    {
+      "scenario_id": "mc_surge_006",
+      "regime": "surge",
+      "split": "train",
+      "instants": 67,
+      "sha256": "25db4322ed1dd1e209e443b32f38f9342e69e642bb93bb7bbff5a7d7c630f558"
+    },
+    {
+      "scenario_id": "mc_surge_007",
+      "regime": "surge",
+      "split": "train",
+      "instants": 73,
+      "sha256": "7f05642943e70ae2754bd004d2615b603910eb7d25e0978d2f9068fdf6b61a52"
+    },
+    {
+      "scenario_id": "mc_surge_008",
+      "regime": "surge",
+      "split": "train",
+      "instants": 61,
+      "sha256": "56c51c1a52070e6402afc05f134a5724649056f2d6e368f5bd89030ecbd92159"
+    },
+    {
+      "scenario_id": "mc_surge_009",
+      "regime": "surge",
+      "split": "val",
+      "instants": 67,
+      "sha256": "139f715b832debed8ebc42090ecafc10853e46b477547c3a672d1f3accf4a1bf"
+    },
+    {
+      "scenario_id": "mc_surge_010",
+      "regime": "surge",
+      "split": "val",
+      "instants": 61,
+      "sha256": "ba52254b22e0dafe89e4f81a91390808cd072232486c4bf25d397b939b13c566"
+    },
+    {
+      "scenario_id": "mc_surge_011",
+      "regime": "surge",
+      "split": "val",
+      "instants": 61,
+      "sha256": "6106c934a19e5ec40edb2791e570790571d4bda73b8d824ffb6abee63bc4f892"
+    },
+    {
+      "scenario_id": "mc_surge_012",
+      "regime": "surge",
+      "split": "test",
+      "instants": 55,
+      "sha256": "1933f4a42ed1afa97725addcaebc72ac6be79b3739fab012b0d064ce83f42fe6"
+    },
+    {
+      "scenario_id": "mc_surge_013",
+      "regime": "surge",
+      "split": "test",
+      "instants": 49,
+      "sha256": "ccc56794da94f33f0140916e7a9a38199a069a08a1ddc7755b379ee6241fb85a"
+    },
+    {
+      "scenario_id": "mc_surge_014",
+      "regime": "surge",
+      "split": "test",
+      "instants": 67,
+      "sha256": "1690759a791b9084c4fb691693629b86b0e3463c64b10384cf7bd71f7abeae98"
+    },
+    {
+      "scenario_id": "mc_surge_015",
+      "regime": "surge",
+      "split": "test",
+      "instants": 67,
+      "sha256": "a7b6e29b19e4479198728d74e8c726c33b62fd78e5794eebc1f8d93d2f287155"
+    },
+    {
+      "scenario_id": "mc_blockage_000",
+      "regime": "blockage",
+      "split": "train",
+      "instants": 61,
+      "sha256": "d2906f4972279053cd8dd7dcbbe557cd5ef9b4617afb8943458930a0d6b102ea"
+    },
+    {
+      "scenario_id": "mc_blockage_001",
+      "regime": "blockage",
+      "split": "train",
+      "instants": 73,
+      "sha256": "fb67472002970faf087f5ef66eda4de89641034396d064f83a1c95d20b0e0d04"
+    },
+    {
+      "scenario_id": "mc_blockage_002",
+      "regime": "blockage",
+      "split": "train",
+      "instants": 67,
+      "sha256": "49c0d4cf8b554c3f6a8b17be0c1d4a1b04b231d442d098b621e6521c4cab37a9"
+    },
+    {
+      "scenario_id": "mc_blockage_003",
+      "regime": "blockage",
+      "split": "train",
+      "instants": 73,
+      "sha256": "a4b8a9f98d4abbc26a4cd357e6d116f3a3cd7dbbda8b28b41d6234810506454f"
+    },
+    {
+      "scenario_id": "mc_blockage_004",
+      "regime": "blockage",
+      "split": "train",
+      "instants": 73,
+      "sha256": "f7d5c39813c9005b63bc5fc7d41c18e81eff3f1ee7dc7a4f7e1fa5bb36cfdb67"
+    },
+    {
+      "scenario_id": "mc_blockage_005",
+      "regime": "blockage",
+      "split": "train",
+      "instants": 67,
+      "sha256": "5b165a6200ae144d0aff923b538ca49d4fec21b7ac7bbe57e6db800a494f9a63"
+    },
+    {
+      "scenario_id": "mc_blockage_006",
+      "regime": "blockage",
+      "split": "train",
+      "instants": 73,
+      "sha256": "47f70a07bf5fe9f4d3208d8160bde5c982cb0c77b7f8b4f87fe0882d829187a0"
+    },
+    {
+      "scenario_id": "mc_blockage_007",
+      "regime": "blockage",
+      "split": "train",
+      "instants": 61,
+      "sha256": "9273c9dee3e11e31e14b64407137fbd096d4e5ae868f649ceae3ddf770e0a457"
+    },
+    {
+      "scenario_id": "mc_blockage_008",
+      "regime": "blockage",
+      "split": "train",
+      "instants": 67,
+      "sha256": "e3d1c512b5ee79ef62ceeecbc1bc661bd3462b065c5bf8c9fb97f70295db43d3"
+    },
+    {
+      "scenario_id": "mc_blockage_009",
+      "regime": "blockage",
+      "split": "val",
+      "instants": 55,
+      "sha256": "0d1aecc1e487ad67d8f238c06ccc0487d5fc02aeb57398eb0ef2e7eae883167a"
+    },
+    {
+      "scenario_id": "mc_blockage_010",
+      "regime": "blockage",
+      "split": "val",
+      "instants": 67,
+      "sha256": "d803987b553c99c98201b2dfaecfb625705312861d29b8e7c5f8fca1a3f3b826"
+    },
+    {
+      "scenario_id": "mc_blockage_011",
+      "regime": "blockage",
+      "split": "val",
+      "instants": 73,
+      "sha256": "87ff3660ba1f87a323b83cf00cc9486aafe73f7ff83613590bc108d7bd77e619"
+    },
+    {
+      "scenario_id": "mc_blockage_012",
+      "regime": "blockage",
+      "split": "test",
+      "instants": 49,
+      "sha256": "05339f0f55c75075b39787e28fedec66cbfa998f7f0a9347a0f14480b30b23e0"
+    },
+    {
+      "scenario_id": "mc_blockage_013",
+      "regime": "blockage",
+      "split": "test",
+      "instants": 55,
+      "sha256": "b83f620caad01a38776399ed6209f2c82be375c8c69059cb61159aa2976b0a01"
+    },
+    {
+      "scenario_id": "mc_blockage_014",
+      "regime": "blockage",
+      "split": "test",
+      "instants": 73,
+      "sha256": "048294d4ed0aec3fdd3f9c7ea568cede1d1400a933fe14179554e5a9e4c0d520"
+    },
+    {
+      "scenario_id": "mc_blockage_015",
+      "regime": "blockage",
+      "split": "test",
+      "instants": 55,
+      "sha256": "85870bb7119b08678887aa4516a0a97191bd39e296748d4eae2e8db9750cc9c9"
+    },
+    {
+      "scenario_id": "mc_observation_outage_000",
+      "regime": "observation_outage",
+      "split": "train",
+      "instants": 61,
+      "sha256": "ae24f902b83c39a1f2c4388bfb604cd4f9ca983f9f16baef8d964dd905670513"
+    },
+    {
+      "scenario_id": "mc_observation_outage_001",
+      "regime": "observation_outage",
+      "split": "train",
+      "instants": 55,
+      "sha256": "ddfa90b104df058ef30c3c3d556544d0cb9cbfa62eeac6d323b5cb417f64f1dc"
+    },
+    {
+      "scenario_id": "mc_observation_outage_002",
+      "regime": "observation_outage",
+      "split": "train",
+      "instants": 49,
+      "sha256": "186b030c813cf79b23bfb5190bc48466c5db91ab4ea3616a87d22012c328e612"
+    },
+    {
+      "scenario_id": "mc_observation_outage_003",
+      "regime": "observation_outage",
+      "split": "train",
+      "instants": 49,
+      "sha256": "93dee0964b21fc9804f97130a98d1d7b593233ec5309ff68e54a082d2ac3c7fe"
+    },
+    {
+      "scenario_id": "mc_observation_outage_004",
+      "regime": "observation_outage",
+      "split": "train",
+      "instants": 55,
+      "sha256": "6f53a2962eaf691f417c64a198daa9e48714f202448224cb629f52cbadc31c18"
+    },
+    {
+      "scenario_id": "mc_observation_outage_005",
+      "regime": "observation_outage",
+      "split": "train",
+      "instants": 67,
+      "sha256": "3648bef0bbffcab69312c2a18c4bde38314d7199b47f69afd3e6590e0b7fb71b"
+    },
+    {
+      "scenario_id": "mc_observation_outage_006",
+      "regime": "observation_outage",
+      "split": "train",
+      "instants": 61,
+      "sha256": "31a20a2f0d7b02a54cd211a648536558299c32b2bcbbab1c374c430b1f3da089"
+    },
+    {
+      "scenario_id": "mc_observation_outage_007",
+      "regime": "observation_outage",
+      "split": "train",
+      "instants": 73,
+      "sha256": "2f7378a2357c957e6cab53e4421ec5f65710f49021ad3a5bcb5d8ca046c745ed"
+    },
+    {
+      "scenario_id": "mc_observation_outage_008",
+      "regime": "observation_outage",
+      "split": "train",
+      "instants": 55,
+      "sha256": "825d071acb4ec0d7e8198d2fafa72d84de1210699b832e566e54ba8e8ad5367e"
+    },
+    {
+      "scenario_id": "mc_observation_outage_009",
+      "regime": "observation_outage",
+      "split": "val",
+      "instants": 73,
+      "sha256": "cd898f48fc007356b1b432915d465d5bde7cf496c6866ed18c1a37d27cc88491"
+    },
+    {
+      "scenario_id": "mc_observation_outage_010",
+      "regime": "observation_outage",
+      "split": "val",
+      "instants": 67,
+      "sha256": "94b7b0adbae629652a5f55a83a0dcca46ac7318e433245d6a1b6e30a188ca5e6"
+    },
+    {
+      "scenario_id": "mc_observation_outage_011",
+      "regime": "observation_outage",
+      "split": "val",
+      "instants": 67,
+      "sha256": "c10ce2df437544830c3eedb1ec3ca09955e26795b0dee3274f4334a67096b500"
+    },
+    {
+      "scenario_id": "mc_observation_outage_012",
+      "regime": "observation_outage",
+      "split": "test",
+      "instants": 61,
+      "sha256": "13d4a47be6e9aea8ce14a3b70f6c7dc7f6cd165a0cfe9906d164ea9b262e654d"
+    },
+    {
+      "scenario_id": "mc_observation_outage_013",
+      "regime": "observation_outage",
+      "split": "test",
+      "instants": 49,
+      "sha256": "d3c2103d4a6459500d9892cbe836f99f1efbb0bd4dca8144414db113ea1b6b2f"
+    },
+    {
+      "scenario_id": "mc_observation_outage_014",
+      "regime": "observation_outage",
+      "split": "test",
+      "instants": 73,
+      "sha256": "847b587a6afb5638c378bacc8410bad9ea39173ff65a84ea756a71a71d6142e7"
+    },
+    {
+      "scenario_id": "mc_observation_outage_015",
+      "regime": "observation_outage",
+      "split": "test",
+      "instants": 55,
+      "sha256": "1a2d1ee64293105eb3af97266ec2b19017a6eeadaf8f6349a630cb8d84ea38eb"
+    },
+    {
+      "scenario_id": "mc_compound_000",
+      "regime": "compound",
+      "split": "train",
+      "instants": 49,
+      "sha256": "52511acd9e30c9f97eb4032e7d18a7967af8cc4fa972df398a904099e94135bb"
+    },
+    {
+      "scenario_id": "mc_compound_001",
+      "regime": "compound",
+      "split": "train",
+      "instants": 67,
+      "sha256": "097764e02d8b34ad993b1168600c9bfc692ba020c494fc5be243a33d941842ba"
+    },
+    {
+      "scenario_id": "mc_compound_002",
+      "regime": "compound",
+      "split": "train",
+      "instants": 61,
+      "sha256": "4669896cdbcc79e18e8512bf8ccbe8b7c35a4adaeb844743bf8dc3fdcdd2d56c"
+    },
+    {
+      "scenario_id": "mc_compound_003",
+      "regime": "compound",
+      "split": "train",
+      "instants": 55,
+      "sha256": "e2c41aeca0f7c47082c21d6a0fbbccd597f32a4d5f04f34f665cd4d20546b964"
+    },
+    {
+      "scenario_id": "mc_compound_004",
+      "regime": "compound",
+      "split": "train",
+      "instants": 61,
+      "sha256": "273a3eec0f68c1d8b0df9c497c73795e731b6dbba64ee03e2f33bbac68f7de43"
+    },
+    {
+      "scenario_id": "mc_compound_005",
+      "regime": "compound",
+      "split": "train",
+      "instants": 55,
+      "sha256": "778e8977e2fad088c257e608fe8856ac0498727bdb22a6633423eb005453f6b7"
+    },
+    {
+      "scenario_id": "mc_compound_006",
+      "regime": "compound",
+      "split": "train",
+      "instants": 61,
+      "sha256": "81357b8dccb226c253115bc7c9b0be824753a0be86db7c5c9c30bb700f62480c"
+    },
+    {
+      "scenario_id": "mc_compound_007",
+      "regime": "compound",
+      "split": "train",
+      "instants": 73,
+      "sha256": "767ede7ed0d2b90124ace36fcf905c6159f588eaa5ea185e46b2b90323ad4d82"
+    },
+    {
+      "scenario_id": "mc_compound_008",
+      "regime": "compound",
+      "split": "train",
+      "instants": 73,
+      "sha256": "7146a9ce5dc4aac25daca7906f525ade6615f4004f41b25c02e3afa9fc346c0c"
+    },
+    {
+      "scenario_id": "mc_compound_009",
+      "regime": "compound",
+      "split": "val",
+      "instants": 73,
+      "sha256": "4e293ce418261a9efb206cf3bdf1399ed63ac861d3f5878df55b2870e30c34f6"
+    },
+    {
+      "scenario_id": "mc_compound_010",
+      "regime": "compound",
+      "split": "val",
+      "instants": 73,
+      "sha256": "4c18256bdd8fefb7708fcec7dbda80e75c8ce04e3b2354c6d03e5d306ee63e65"
+    },
+    {
+      "scenario_id": "mc_compound_011",
+      "regime": "compound",
+      "split": "val",
+      "instants": 67,
+      "sha256": "b0d5dd93ebbf36df210f79a9c4aeee24b303886e7622fd4ff0d850f615c22c67"
+    },
+    {
+      "scenario_id": "mc_compound_012",
+      "regime": "compound",
+      "split": "test",
+      "instants": 73,
+      "sha256": "c791ed8790dad9966a95147bdc0f9c94a7dc2dc3d02dab953a2746add7743373"
+    },
+    {
+      "scenario_id": "mc_compound_013",
+      "regime": "compound",
+      "split": "test",
+      "instants": 49,
+      "sha256": "947739507417560ac74d8a71782ecb58e326ea167068fe73f9c38506979b60b2"
+    },
+    {
+      "scenario_id": "mc_compound_014",
+      "regime": "compound",
+      "split": "test",
+      "instants": 61,
+      "sha256": "382e0bb9748fc18b89e7c3a8f94e087be080bc93bda0a549bb2e2cc159ca40c6"
+    },
+    {
+      "scenario_id": "mc_compound_015",
+      "regime": "compound",
+      "split": "test",
+      "instants": 61,
+      "sha256": "2d84b21747063e77b5fa0ca24c4398517273017ea2629f5493cd4d9fdd2f8825"
+    }
+  ]
+}

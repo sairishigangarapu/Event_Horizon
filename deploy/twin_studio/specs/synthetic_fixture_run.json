@@ -1,0 +1,13 @@
+{
+  "scenario_id": "synthetic_fixture_east_gate_closure",
+  "mode": "custom",
+  "epoch_utc": "2026-10-15T09:00:00Z",
+  "scene": {
+    "duration": 60, "scale": 0.1, "seed": 11, "randomCount": 1,
+    "routes": [
+      {"id": "r_e", "name": "Annex to E gate", "points": [{"x": 800, "y": 580}, {"x": 968, "y": 580}], "count": 40, "speed": 1.4, "width": 3},
+      {"id": "r_s", "name": "Courtyard to south", "points": [{"x": 450, "y": 450}, {"x": 450, "y": 640}], "count": 30, "speed": 1.2, "width": 3}
+    ],
+    "events": [{"id": "inc_e", "name": "East gate shut", "type": "gate_closure", "gateId": "T_GATE_E", "start": 15, "end": 40}]
+  }
+}

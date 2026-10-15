@@ -1,0 +1,65 @@
+{
+  "rule": "a channel is validated if its validation-scenario error (MAE; Brier for exit_open) is no worse than the zone's latest-report baseline",
+  "validated_channels": [
+    "density",
+    "speed",
+    "inflow",
+    "outflow",
+    "exit_open"
+  ],
+  "validation_scenarios": [
+    "mc_blockage_009",
+    "mc_blockage_010",
+    "mc_blockage_011",
+    "mc_compound_009",
+    "mc_compound_010",
+    "mc_compound_011",
+    "mc_normal_009",
+    "mc_normal_010",
+    "mc_normal_011",
+    "mc_observation_outage_009",
+    "mc_observation_outage_010",
+    "mc_observation_outage_011",
+    "mc_surge_009",
+    "mc_surge_010",
+    "mc_surge_011"
+  ],
+  "detail": {
+    "density": {
+      "metric": "mae",
+      "tree": 0.022,
+      "latest_report_baseline": 0.0233,
+      "validated": true
+    },
+    "speed": {
+      "metric": "mae",
+      "tree": 0.1183,
+      "latest_report_baseline": 0.1186,
+      "validated": true
+    },
+    "inflow": {
+      "metric": "mae",
+      "tree": 0.2452,
+      "latest_report_baseline": 0.2511,
+      "validated": true
+    },
+    "outflow": {
+      "metric": "mae",
+      "tree": 0.2103,
+      "latest_report_baseline": 0.2412,
+      "validated": true
+    },
+    "queue_length": {
+      "metric": "mae",
+      "tree": 4.2236,
+      "latest_report_baseline": 3.663,
+      "validated": false
+    },
+    "exit_open": {
+      "metric": "brier",
+      "tree": 0.0101,
+      "latest_report_baseline": 0.0292,
+      "validated": true
+    }
+  }
+}

@@ -1,0 +1,11 @@
+# Build context whitelist for deploy/twin_studio/Dockerfile (Phase 4). Everything else - in
+# particular deploy/twin_studio/secrets/, models/, data/ and .env files - never enters an image.
+*
+!services/
+!tests/twin_phase4_integration/
+!deploy/twin_studio/requirements.txt
+!deploy/twin_studio/specs/
+**/__pycache__
+**/*.pyc
+**/secrets/
+**/.env
