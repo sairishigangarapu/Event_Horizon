@@ -1,8 +1,26 @@
-# Event Horizon — integrated entry points
+# Event Horizon — Crowd Reliability & Forecasting
+
+**Repository:** `https://github.com/sairishigangarapu/Event_Horizon.git`
 
 Start locally with Python 3.11/3.12: `python start_review.py` (Windows: `START_REVIEW_WINDOWS.bat`). The launcher opens `/dashboard/`, where density, direction, duration and seed control the curved random-flow world and the existing forecasting backend. Studio remains at `/`.
 
-For an already prepared environment: `python -m uvicorn hosted_server:app --host 127.0.0.1 --port 8000 --workers 1`. Set `MODEL_DIR` explicitly to choose a compatible artifact directory. Defaults for hosted/local review use the historical synthetic mc_v2 checkpoint; custom-route prediction is experimental and the recorded stress runs include missed advance warnings.
+For an already prepared environment: `python -m uvicorn hosted_server:app --host 127.0.0.1 --port 8000 --workers 1`. Set `MODEL_DIR` explicitly to choose a compatible artifact directory. Defaults for hosted/local review use the historical synthetic `mc_v2` checkpoint; custom-route prediction is experimental and the recorded stress runs include missed advance warnings.
+
+## Repository Structure
+
+| Path | Purpose |
+| --- | --- |
+| `crowd_reliability/` | Core FastAPI backend, ML pipeline (`ml/`), data contracts, reliability engine, simulation, and services |
+| `person4/` | Standalone `event_horizon_p4` temporal GRU package and tests |
+| `services/twin_studio/` | Preserved Twin Studio v3 source-of-truth engine, replay, and A* routing |
+| `studio/` | Interactive Studio frontend (`dist/`), Python observation/reporting server, and JS/Python tests |
+| `runtime_frontend/` | FastAPI-served runtime dashboard assets |
+| `dashboard/` | Legacy Streamlit evaluator dashboard |
+| `models/` | Versioned model manifests and checkpoints (`production`, `candidates/mc_v2`, `environments/`) |
+| `data/` | Demo fixtures and local SQLite/output directories |
+| `deploy/` | Docker, Railway, Hugging Face Space, and Twin Studio deployment configs |
+| `docs/` | Architecture specification, implementation status, and audit reconciliation |
+| `tests/` | Automated Python test suites (440+ tests) and smoke checks |
 
 Read [current architecture](docs/ARCHITECTURE.md), [implementation status](docs/IMPLEMENTATION_STATUS.md) and [integration/audit evidence](docs/INTEGRATION_AUDIT_RECONCILIATION.md) before the historical setup notes below. The main branch preserves Twin Studio v3 as a separate environment; its models and A* recommendations are not silently substituted into the route-based live model.
 

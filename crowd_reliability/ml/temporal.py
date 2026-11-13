@@ -28,14 +28,18 @@ class MultivariateTemporalForecaster(nn.Module):
         hidden_dim: int = 64,
         num_layers: int = 2,
         num_horizons: int = 3,
-        horizons_sec: List[int] = None
+        horizons_sec: List[int] = None,
+        numeric_activation: str = "relu",
     ):
         super().__init__()
+        if numeric_activation not in ("relu", "softplus"):
+            raise ValueError(f"Unsupported numeric_activation: {numeric_activation}")
         self.input_dim = input_dim
         self.hidden_dim = hidden_dim
         self.num_layers = num_layers
         self.num_horizons = num_horizons
         self.horizons_sec = horizons_sec or [30, 60, 120]
+        self.numeric_activation = numeric_activation
         self.version = "gru_forecaster_v1"
 
         self.gru = nn.GRU(
@@ -46,6 +50,9 @@ class MultivariateTemporalForecaster(nn.Module):
             dropout=0.1 if num_layers > 1 else 0.0
         )
 
+        def _out_act() -> nn.Module:
+            return nn.Softplus() if numeric_activation == "softplus" else nn.ReLU()
+
         # 5 numeric heads (density, speed, inflow, outflow, queue_length)
         # 1 probability head (exit_open)
         # For each horizon, we have a specialized projection head
@@ -54,7 +61,7 @@ class MultivariateTemporalForecaster(nn.Module):
                 nn.Linear(hidden_dim, 32),
                 nn.ReLU(),
                 nn.Linear(32, 5),  # 5 numeric variables
-                nn.ReLU()          # physical non-negativity constraint
+                _out_act(),        # physical non-negativity constraint
             ) for _ in range(num_horizons)
         ])
 
@@ -108,11 +115,9 @@ class MultivariateTemporalForecaster(nn.Module):
             hidden_dim=checkpoint["hidden_dim"],
             num_layers=checkpoint["num_layers"],
             num_horizons=checkpoint["num_horizons"],
-            horizons_sec=checkpoint["horizons_sec"]
+            horizons_sec=checkpoint["horizons_sec"],
+            numeric_activation=checkpoint.get("numeric_activation", "relu"),
         )
-        if checkpoint.get("numeric_activation")=="softplus":
-            for head in model.numeric_heads:head[-1]=nn.Softplus()
-            model.numeric_activation="softplus"
         model.load_state_dict(checkpoint["state_dict"])
         model.version = checkpoint.get("version", model.version)
         # A loaded checkpoint is for inference: disable the inter-layer GRU dropout,

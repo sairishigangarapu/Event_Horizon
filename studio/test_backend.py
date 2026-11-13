@@ -55,7 +55,7 @@ class Tests(unittest.TestCase):
         self.assertEqual(len(py['barriers'][0]['routes']),2)
         self.assertEqual(len(py['audit']['violations']),0)
         script="const E=require('./dist/engine.js');const c=JSON.parse(require('fs').readFileSync(0,'utf8'));console.log(JSON.stringify(E.simulate(c,'custom')))"
-        js=json.loads(subprocess.check_output(['node','-e',script],input=json.dumps(scene).encode()))
+        js=json.loads(subprocess.check_output(['node','-e',script],input=json.dumps(scene).encode(),cwd=str(Path(__file__).parent)))
         self.assertEqual(py['completed'],js['completed'])
         for a,b in zip(py['rows'],js['rows']):
             for key in ['active','exited','waiting_entry','blocked']:self.assertEqual(a[key],b[key])
@@ -71,7 +71,7 @@ class Tests(unittest.TestCase):
         self.assertEqual(cm.exception.code,403)
     def test_js_python_parity(self):
         script="const E=require('./dist/engine.js');let c=JSON.parse(require('fs').readFileSync(0,'utf8'));console.log(JSON.stringify(Object.fromEntries(['ideal','custom','random'].map(m=>[m,E.simulate(c,m)]))))"
-        js=json.loads(subprocess.check_output(['node','-e',script],input=json.dumps(C).encode()))
+        js=json.loads(subprocess.check_output(['node','-e',script],input=json.dumps(C).encode(),cwd=str(Path(__file__).parent)))
         def compare(a,b):
             if isinstance(a,dict):
                 self.assertEqual(set(a),set(b))

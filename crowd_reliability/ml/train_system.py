@@ -107,17 +107,58 @@ def metrics(pred,batch):
     for h,horizon in enumerate((30,60,120)):
         for i,var in enumerate(TARGET_VAR_NAMES):
             m=batch['mask'][:,:,h,i];error=pred[:,:,h,i][m]-batch['y'][:,:,h,i][m]
-            result[f'{var}/{horizon}s']={'mae':float(error.abs().mean()),'rmse':float((error**2).mean().sqrt()),'count':int(m.sum())}
+            result[f'{var}/{horizon}s']={'mae':float(error.abs().mean()),'rmse':float((error**2).mean().sqrt()),'bias':float(error.mean()),'count':int(m.sum())}
     return result
+
+def conformal_intervals(pred,batch,alpha=0.1):
+    """Split-conformal nonconformity quantiles (1 - alpha) computed on validation residuals."""
+    intervals={}
+    for h,horizon in enumerate((30,60,120)):
+        for i,var in enumerate(TARGET_VAR_NAMES):
+            m=batch['mask'][:,:,h,i]
+            if not m.any():
+                continue
+            abs_err=(pred[:,:,h,i][m]-batch['y'][:,:,h,i][m]).abs().numpy()
+            n=len(abs_err)
+            q_level=min(1.0,np.ceil((n+1)*(1.0-alpha))/n)
+            intervals[f'{var}/{horizon}s']={'q90_half_width':float(np.quantile(abs_err,q_level)),'alpha':alpha,'count':int(n)}
+    return intervals
+
+def ewma_baseline_metrics(items,venue,horizons=(30,60,120)):
+    """Evaluate Stream A (observation-only EWMA) across all horizons on the same scenarios."""
+    from crowd_reliability.services.central_source import CentralSourceAdapter
+    from crowd_reliability.services.evaluator import EvaluationService
+    adapter=CentralSourceAdapter(mode='simulated')
+    evaluator=EvaluationService()
+    all_forecasts=[];all_refs=[];max_t=None
+    for s in items:
+        issue_times=s['times'][:-max(6,12,24)] if len(s['times'])>24 else s['times']
+        all_forecasts.extend(adapter.generate_simulated_forecasts(s['id'],s['obs'],venue,horizons_sec=list(horizons),issue_times=issue_times))
+        for ti,t in enumerate(s['times']):
+            for zi,z in enumerate(venue.zones):
+                for vi,var in enumerate(TARGET_VAR_NAMES):
+                    from crowd_reliability.models.schema import ReferenceStateRecord
+                    all_refs.append(ReferenceStateRecord(scenario_id=s['id'],zone_id=z['zone_id'],variable=var,value=float(s['labels'][ti,zi,vi]),unit='p/m2',state_at=t,label_available_at=t))
+        if max_t is None or max(s['times'])>max_t:max_t=max(s['times'])
+    # Match units per forecast for exact EvaluationService alignment
+    unit_by_key={(f.scenario_id,f.zone_id,f.variable):f.unit for f in all_forecasts}
+    for r in all_refs:
+        u=unit_by_key.get((r.scenario_id,r.zone_id,r.variable))
+        if u:r.unit=u
+    scored=evaluator.score_predictions(all_forecasts,all_refs,horizons_sec=list(horizons),evaluation_time=max_t)
+    stream_metrics=scored.get('stream_a_central',{})
+    flat={}
+    for h in horizons:
+        for var in TARGET_VAR_NAMES:
+            if var in stream_metrics.get(h,{}):
+                flat[f'{var}/{h}s']=stream_metrics[h][var]
+    return flat
 
 def fit_neural(graph,data,candidate,seed,epochs):
     torch.manual_seed(seed);enc=SpatialEncoder(graph,seed=seed,hidden_dim=candidate['hidden'])
     norm=fit_normalization(data['train']['f'].numpy().reshape(-1,36),data['train']['v'].numpy().reshape(-1,36),f'mc_train_{seed}')
     enc.set_normalization(norm)
-    temporal=MultivariateTemporalForecaster(40)
-    # Positive numeric heads avoid dead ReLU regressors during initial training.
-    for head in temporal.numeric_heads:head[-1]=torch.nn.Softplus()
-    temporal.numeric_activation='softplus'
+    temporal=MultivariateTemporalForecaster(40,hidden_dim=candidate['hidden'],numeric_activation='softplus')
     optimizer=torch.optim.Adam(list(enc.hypernet.parameters())+list(enc.gnn.parameters())+list(temporal.parameters()),lr=candidate['lr'])
     rng=np.random.default_rng(seed);best=None;bestloss=float('inf');curve=[];bad=0
     for epoch in range(epochs):
@@ -169,19 +210,24 @@ def run(out,seed=42,runs=6,epochs=20):
     with torch.no_grad():validation_pred=forward(enc,temporal,data['validation'])
     validation_metrics=metrics(validation_pred,data['validation'])
     validation_baseline=metrics(data['validation']['baseline'],data['validation'])
-    wins=sum(validation_metrics[f'{v}/30s']['mae']<validation_baseline[f'{v}/30s']['mae'] for v in TARGET_VAR_NAMES[:5])
+    validation_ewma=ewma_baseline_metrics(splits['validation'],venue)
+    val_intervals=conformal_intervals(validation_pred,data['validation'])
+    wins_by_h={h:sum(validation_metrics[f'{v}/{h}s']['mae']<validation_baseline[f'{v}/{h}s']['mae'] for v in TARGET_VAR_NAMES[:5]) for h in (30,60,120)}
+    wins=wins_by_h[30]
     gate=wins>=3 and validation_metrics['queue_length/30s']['mae']<=1.1*validation_baseline['queue_length/30s']['mae']
     status='synthetic_validated' if gate else 'trained_not_validated'
     # Final test is reporting only; it never selects parameters or determines the gate.
     test=windows(model_inputs(splits['test'],bank,graph))
     with torch.no_grad():pred=forward(enc,temporal,test)
+    heldout_ewma=ewma_baseline_metrics(splits['test'],venue)
     config=dict(**NEURAL_CONFIG,**tree_config)
     summary={'scope':'synthetic_only','selection_objective':'tree current-state scale-normalized MSE on validation scenarios',
         'neural_configuration_policy':'fixed before fitting; no Monte Carlo neural hyperparameter selection',
         'seed':seed,'selected':config,'trials':trials,'neural_validation_loss':value,'neural_curve':curve,
-        'neural_validation_gate':{'passed':gate,'wins_at_30s':wins,'queue_regression_limit':1.1},
-        'validation_metrics':validation_metrics,'validation_persistence_metrics':validation_baseline,
-        'heldout_metrics':metrics(pred,test),'persistence_metrics':metrics(test['baseline'],test),
+        'neural_validation_gate':{'passed':gate,'wins_at_30s':wins,'wins_by_horizon':wins_by_h,'queue_regression_limit':1.1},
+        'conformal_q90_intervals':val_intervals,
+        'validation_metrics':validation_metrics,'validation_persistence_metrics':validation_baseline,'validation_ewma_metrics':validation_ewma,
+        'heldout_metrics':metrics(pred,test),'persistence_metrics':metrics(test['baseline'],test),'heldout_ewma_metrics':heldout_ewma,
         'oos_folds':folds,'split_ids':{k:[x['id'] for x in v] for k,v in splits.items()},
         'split_seeds':{k:[x['seed'] for x in v] for k,v in splits.items()},
         'training_runs':runs,'epochs_max':epochs,'calibrated_real_world':False,

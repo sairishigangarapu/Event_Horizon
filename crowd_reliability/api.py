@@ -67,15 +67,25 @@ from crowd_reliability.body_limit import ApiBodyLimit
 app.add_middleware(ApiBodyLimit)
 _API_LIMIT=ApiRateLimit()
 
+def _rate_limit_client_key(request) -> str:
+    forwarded = request.headers.get("X-Forwarded-For", "")
+    if forwarded:
+        first_ip = forwarded.split(",", 1)[0].strip()
+        if first_ip:
+            return first_ip
+    return request.client.host if request.client else "unknown"
+
+
 @app.middleware("http")
 async def shared_api_boundary(request, call_next):
     if request.url.path.startswith('/api/') and request.method!='OPTIONS':
         if settings.app_env not in ('demo','test','development') and settings.api_rate_limit_per_minute>0 and request.url.path not in ('/api/ready','/api/health'):
-            client=request.client.host if request.client else 'unknown'
+            client=_rate_limit_client_key(request)
             if not _API_LIMIT.allow(client,settings.api_rate_limit_per_minute):
                 return JSONResponse(status_code=429,content={'detail':'API request rate exceeded; retry shortly.'},headers={'Retry-After':'1'})
         if request.url.path not in ('/api/ready','/api/runtime-config','/api/health'):
-            try:check_api_key(request.headers.get('X-API-Key'))
+            client_host = request.client.host if request.client else None
+            try:check_api_key(request.headers.get('X-API-Key'), client_host)
             except HTTPException as exc:return JSONResponse(status_code=exc.status_code,content={'detail':exc.detail})
         origin=request.headers.get('Origin')
         if request.method not in ('GET','HEAD') and origin:

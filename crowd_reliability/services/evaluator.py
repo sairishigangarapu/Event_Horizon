@@ -48,11 +48,9 @@ class EvaluationService:
             if utc(f.received_at)>cutoff or utc(f.issued_at)>cutoff:continue
             stream = f.stream_id
             lead_sec = int(round((f.target_at - f.issued_at).total_seconds()))
-
-            # Match to nearest horizon
-            matched_h = min(horizons_sec, key=lambda h: abs(h - lead_sec))
             if lead_sec not in horizons_sec:
                 continue
+            matched_h = lead_sec
 
             ref_val = ref_map.get((f.scenario_id, f.zone_id, f.variable, f.unit, normalize_ts(f.target_at)))
             if ref_val is None:
@@ -82,10 +80,12 @@ class EvaluationService:
             errors = preds - trues
             mae = float(np.mean(np.abs(errors)))
             rmse = float(np.sqrt(np.mean(errors ** 2)))
+            bias = float(np.mean(errors))
 
             var_metric: Dict[str, float] = {
                 "mae": round(mae, 4),
                 "rmse": round(rmse, 4),
+                "bias": round(bias, 4),
                 "count": len(preds)
             }
 

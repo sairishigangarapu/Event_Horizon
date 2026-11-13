@@ -41,9 +41,6 @@ from .synthetic import is_exit_zone
 _X_START = 0
 _X_END   = 6   # NUM_CHANNELS = 6
 
-#: Slice for exit_mask within U vector (last element).
-_EXIT_MASK_IDX = U_DIM - 1
-
 
 def _extract_x_from_u(u_history: np.ndarray) -> np.ndarray:
     """

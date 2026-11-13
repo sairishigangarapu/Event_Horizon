@@ -65,3 +65,9 @@ deploy/twin_studio/.env
 .venv_review/
 data/review_outputs/
 review/captured_runs.json
+
+# Editor / local tooling and large raw dataset archives (>100 MB)
+.commandcode/
+.vscode/
+data/dataset.zip
+data/dataset/

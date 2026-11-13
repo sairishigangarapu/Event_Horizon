@@ -7,7 +7,7 @@ class Settings(BaseSettings):
     app_env: str = "demo"
     database_url: str = "sqlite:///./data/app.db"
     scenario_dir: str = "./data/demo"
-    model_dir: str = "./models/production"
+    model_dir: str = "./models/candidates/mc_v2"
     central_source_mode: str = "replay"
     central_forecast_path: str = "./data/demo/central_forecast.csv"
     central_api_url: str = ""

@@ -1,6 +1,8 @@
 import os
+import threading
 import uuid
 import hashlib
+from collections import OrderedDict
 import numpy as np
 import torch
 from datetime import datetime, timezone, timedelta
@@ -121,8 +123,10 @@ class ArchitecturePipeline:
         self.temporal_model.eval()
 
         # Rolling history buffer per scenario: {zone_id: list of U vectors}
-        self.history_buffer: Dict[str, Dict[str, List[np.ndarray]]] = {}
-        self._step_cache = {}
+        self.max_scenarios = 64
+        self.history_buffer: OrderedDict[str, Dict[str, List[np.ndarray]]] = OrderedDict()
+        self._step_cache: OrderedDict[str, Any] = OrderedDict()
+        self._lock = threading.RLock()
 
     def extract_zone_features_detailed(
         self,
@@ -203,9 +207,14 @@ class ArchitecturePipeline:
         u_features: List[np.ndarray] = []
         detailed_list: List[Dict[str, np.ndarray]] = []
 
+        by_zone: Dict[str, List[ObservationRecord]] = {}
+        for obs in recent_observations:
+            by_zone.setdefault(getattr(obs, "zone_id", None), []).append(obs)
+
         base=[]
         for z_data in self.venue.zones:
-            detailed=self.extract_zone_features_detailed(z_data["zone_id"],as_of_time,recent_observations)
+            z_id = z_data["zone_id"]
+            detailed=self.extract_zone_features_detailed(z_id,as_of_time,by_zone.get(z_id, []))
             detailed_list.append(detailed)
             raw,ages,mask=self._legacy_zone_features(detailed)
             base.append(np.concatenate([raw,ages,mask]))
@@ -248,6 +257,15 @@ class ArchitecturePipeline:
         3. Assembles U[z,t] and appends to rolling history.
         4. Runs MultivariateTemporalForecaster -> multi-horizon forecasts.
         """
+        with self._lock:
+            return self._step_unlocked(scenario_id, as_of_time, recent_observations)
+
+    def _step_unlocked(
+        self,
+        scenario_id: str,
+        as_of_time: datetime,
+        recent_observations: List[ObservationRecord]
+    ) -> Tuple[List[TreeOutputRecord], List[ForecastRecord]]:
         self.temporal_model.eval()
         self.hypernet.eval()
         self.gnn.eval()
@@ -255,9 +273,23 @@ class ArchitecturePipeline:
         as_of_time = utc(as_of_time)
         # Normalize ORM-loaded naive and UTC-aware report times at the boundary.
         select_reports(recent_observations, as_of_time, scenario_id=scenario_id)
+        # Fingerprint the effective observation content so the cache only
+        # serves results computed from the same semantic inputs. report_id is
+        # deliberately excluded — it is volatile metadata, not a forecasting input.
+        obs_fingerprint = hash(frozenset(
+            (getattr(o, 'zone_id', None),
+             getattr(o, 'variable', None),
+             float(o.value),
+             str(getattr(o, 'unit', '')),
+             getattr(o, 'source_id', None),
+             utc(o.observed_at).isoformat(),
+             utc(o.published_at).isoformat(),
+             utc(o.received_at).isoformat())
+            for o in recent_observations
+        ))
         prior = self._step_cache.get(scenario_id) if scenario_id in self.history_buffer else None
         if prior and as_of_time < prior[0]:raise ValueError('Replay clock cannot move backwards.')
-        if prior and as_of_time == prior[0]:return prior[1]
+        if prior and as_of_time == prior[0] and prior[2] == obs_fingerprint:return prior[1]
         forecast_records: List[ForecastRecord] = []
 
         # 1. Decision-tree vector D[z,t] per zone, then 2. hypernetwork + GNN -> H[z,t]
@@ -291,6 +323,11 @@ class ArchitecturePipeline:
         # 3. Assemble U[z, t] vector per zone and update history
         if scenario_id not in self.history_buffer:
             self.history_buffer[scenario_id] = {z_data["zone_id"]: [] for z_data in self.venue.zones}
+        else:
+            self.history_buffer.move_to_end(scenario_id)
+        while len(self.history_buffer) > self.max_scenarios:
+            evicted_id, _ = self.history_buffer.popitem(last=False)
+            self._step_cache.pop(evicted_id, None)
 
         u_current_per_zone: List[np.ndarray] = []
         for i, z_data in enumerate(self.venue.zones):
@@ -375,7 +412,7 @@ class ArchitecturePipeline:
                     )
                     forecast_records.append(f_rec)
 
-        self._step_cache[scenario_id] = (as_of_time, (tree_records, forecast_records))
+        self._step_cache[scenario_id] = (as_of_time, (tree_records, forecast_records), obs_fingerprint)
         return tree_records, forecast_records
 
     def readiness(self) -> Dict[str, Any]:

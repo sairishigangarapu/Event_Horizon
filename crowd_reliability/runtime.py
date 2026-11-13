@@ -3,6 +3,7 @@ import csv
 import io
 import math
 import threading
+import time
 import uuid
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -25,6 +26,17 @@ SESSIONS = {}
 # The inference path never receives this store.
 EVALUATION = {}
 LOCK = threading.RLock()
+MAX_SESSIONS = 30
+SESSION_TTL_SECONDS = 3600.0
+
+
+def _evict_expired_sessions(now: float | None = None) -> int:
+    cutoff = (time.monotonic() if now is None else now) - SESSION_TTL_SECONDS
+    expired = [sid for sid, sess in SESSIONS.items() if sess.get('last_active_at', 0.0) < cutoff]
+    for sid in expired:
+        SESSIONS.pop(sid, None)
+        EVALUATION.pop(sid, None)
+    return len(expired)
 
 class Strict(BaseModel):
     model_config = ConfigDict(extra='forbid', allow_inf_nan=False)
@@ -73,7 +85,9 @@ class Labels(Strict):
 def get_session(sid):
     if sid not in SESSIONS:
         raise HTTPException(404, 'Runtime session not found; render the scene again.')
-    return SESSIONS[sid]
+    sess = SESSIONS[sid]
+    sess['last_active_at'] = time.monotonic()
+    return sess
 
 
 def segment_distance(a,b,c,d):
@@ -114,8 +128,9 @@ def start(data: Start):
     if len({r.id for r in data.routes}) != len(data.routes):
         raise HTTPException(422, 'Duplicate route IDs.')
     with LOCK:
-        if len(SESSIONS) >= 30:
-            raise HTTPException(409, 'Runtime has 30 sessions; restart the local server to clear them.')
+        _evict_expired_sessions()
+        if len(SESSIONS) >= MAX_SESSIONS:
+            raise HTTPException(409, f'Runtime has {MAX_SESSIONS} active sessions; restart the local server or wait for idle sessions to expire.')
         venue=venue_from_routes(data)
         try:
             pipeline=ArchitecturePipeline(lookback_steps=settings.lookback_steps, horizons_sec=settings.horizons)
@@ -137,7 +152,7 @@ def start(data: Start):
         sid=uuid.uuid4().hex
         SESSIONS[sid]=dict(id=sid, run_id=data.run_id, mode=data.mode, duration=data.duration,
             venue=venue, pipeline=pipeline, readiness=readiness, time=-1, observations=[], seen={},
-            forecasts=[], trees=[], steps=[], version=0)
+            forecasts=[], trees=[], steps=[], version=0, last_active_at=time.monotonic())
         EVALUATION[sid]={}
         return dict(session_id=sid, dashboard_url=f'/dashboard/?session={sid}', readiness=readiness)
 
@@ -232,11 +247,15 @@ def evaluation(sid: str, data: Labels):
 def evidence(s):
     comparator=ForecastComparator();out=[]
     t=EPOCH+timedelta(seconds=max(0,s['time']))
+    by_zone_var={}
+    for o in s['observations']:
+        if o.observed_at<=t:
+            by_zone_var.setdefault((o.zone_id,o.variable),[]).append(o)
     for z in s['venue'].zones:
         for var in UNITS:
-            rec=comparator.assess_information(s['observations'],t,z['zone_id'],var,zone_type=z.get('zone_type'))
+            recent=by_zone_var.get((z['zone_id'],var),[])
+            rec=comparator.assess_information(recent,t,z['zone_id'],var,zone_type=z.get('zone_type'))
             flags=rec.per_variable_flags
-            recent=[o for o in s['observations'] if o.zone_id==z['zone_id'] and o.variable==var and o.observed_at<=t]
             latest=max(recent,key=lambda o:(o.observed_at,o.received_at,o.report_id)) if recent else None
             # UI evidence index, NOT a trained probability or an input to forecasting.
             freshness=math.exp(-rec.observation_age_seconds/45)
