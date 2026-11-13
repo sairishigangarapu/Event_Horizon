@@ -8,7 +8,7 @@ import sys
 import tempfile
 import time
 import urllib.request
-ROOT=Path(__file__).resolve().parent
+ROOT=Path(__file__).resolve().parents[2]
 
 def run():
     with socket.socket() as sock:sock.bind(('127.0.0.1',0));port=sock.getsockname()[1]

@@ -1,7 +1,7 @@
 """Actual TCP single-public-port Railway smoke test, no account/secrets required."""
 import json,os,socket,subprocess,sys,tempfile,time,urllib.request,urllib.error
 from pathlib import Path
-ROOT=Path(__file__).resolve().parent
+ROOT=Path(__file__).resolve().parents[2]
 
 def run():
  with socket.socket() as sock:sock.bind(('127.0.0.1',0));port=sock.getsockname()[1]

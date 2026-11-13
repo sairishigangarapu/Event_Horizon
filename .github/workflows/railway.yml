@@ -52,10 +52,10 @@ jobs:
           node test_ui.js
           node test_live.js
       - name: Two-service roundtrip
-        run: python verify_roundtrip.py
+        run: python scripts/verify/verify_roundtrip.py
       - name: Railway single-port roundtrip
-        run: python verify_hosted.py
+        run: python scripts/verify/verify_hosted.py
       - name: Authenticated random-flow frontend integration
-        run: python verify_random_flow.py
+        run: python scripts/verify/verify_random_flow.py
       - name: Build Railway image
         run: docker build --tag event-horizon:${{ github.sha }} .

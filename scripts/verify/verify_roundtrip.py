@@ -1,7 +1,7 @@
 """Actual HTTP smoke test. Starts/stops both services, uses temporary run outputs."""
 import json,os,socket,subprocess,sys,tempfile,time,urllib.request,urllib.error
 from pathlib import Path
-ROOT=Path(__file__).resolve().parent
+ROOT=Path(__file__).resolve().parents[2]
 
 def freeport():
  with socket.socket() as s:s.bind(('127.0.0.1',0));return s.getsockname()[1]

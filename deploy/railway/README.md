@@ -37,8 +37,8 @@ Keep one replica and one Uvicorn worker because live session state is in memory.
 
 ## Verify
 
-    python verify_hosted.py
-    python verify_random_flow.py
+    python scripts/verify/verify_hosted.py
+    python scripts/verify/verify_random_flow.py
 
 This starts the actual hosted ASGI entrypoint on a temporary port and verifies page/asset routing, same-origin backend configuration, render, released observations, trained runtime inference, matured labels, hidden future actuals and a Unicode master report.
 

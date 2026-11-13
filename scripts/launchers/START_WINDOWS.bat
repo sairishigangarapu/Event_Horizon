@@ -1,7 +1,7 @@
 @echo off
 set PYTHONUTF8=1
 set PYTHONIOENCODING=utf-8
-cd /d "%~dp0"
+cd /d "%~dp0\..\.."
 if exist .venv\Scripts\python.exe goto install
 py -3.12 -m venv .venv
 if exist .venv\Scripts\python.exe goto install
